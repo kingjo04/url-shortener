@@ -196,14 +196,14 @@ def shorten():
     elif content_type in ('image', 'document'):
         file = request.files.get('file')
         if file:
-            # Validasi tipe file dan ukuran
+            # Validasi tipe file untuk gambar saja, dokumen menerima semua ekstensi
             allowed_extensions = {
                 'image': ['jpg', 'jpeg', 'png'],
-                'document': ['pdf', 'docx']
+                'document': []  # Kosongkan untuk menerima semua ekstensi
             }
             file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
-            if file_ext not in allowed_extensions[content_type]:
-                return render_template('index.html', user=session['user'], error=f'File tidak valid! Gunakan {", ".join(allowed_extensions[content_type])} untuk {content_type}.')
+            if content_type == 'image' and file_ext not in allowed_extensions['image']:
+                return render_template('index.html', user=session['user'], error=f'File tidak valid! Gunakan {", ".join(allowed_extensions["image"])} untuk gambar.')
             
             # Validasi ukuran file (maks 10MB)
             file.seek(0, os.SEEK_END)
@@ -223,15 +223,15 @@ def shorten():
             try:
                 # Upload file ke Supabase Storage
                 file_content = file.read()
-                logging.debug(f"Uploading file: {file_name}, size: {len(file_content)} bytes, extension: {file_ext}, content_type: {content_type_map.get(file_ext, file.content_type)}")
+                logging.debug(f"Uploading file: {file_name}, size: {len(file_content)} bytes, extension: {file_ext}, content_type: {content_type_map.get(file_ext, 'application/octet-stream')}")
                 response = supabase.storage.from_('content').upload(
                     file_name,
                     file_content,
-                    {'content-type': content_type_map.get(file_ext, file.content_type)}
+                    {'content-type': content_type_map.get(file_ext, 'application/octet-stream')}
                 )
                 logging.debug(f"Supabase upload response: {response}")
                 # Dapatkan URL publik
-                content = f"{SUPABASE_URL}/storage/v1/object/public/content/{file_name}"
+                content = supabase.storage.from_('content').get_public_url(file_name)
                 logging.debug(f"Generated public URL: {content}")
                 # Verifikasi URL publik
                 test_response = supabase.storage.from_('content').get_public_url(file_name)
@@ -272,7 +272,8 @@ def redirect_url(short_code):
 
     return render_template('content.html', content_type=content_type, content=content)
 
-# Route untuk download file
+from werkzeug.utils import secure_filename
+
 @app.route('/download/<short_code>')
 def download(short_code):
     response = supabase.table('links').select('*').eq('short_code', short_code).execute()
@@ -283,11 +284,32 @@ def download(short_code):
     if link['content_type'] not in ('image', 'document'):
         return redirect(url_for('dashboard', error='Konten bukan file yang bisa diunduh!'))
 
-    file_name = link['content'].split('/content/')[-1]
+    file_path = link['content'].split('/content/')[-1]
     try:
         # Download file dari Supabase Storage
-        file_data = supabase.storage.from_('content').download(file_name)
-        file_ext = file_name.rsplit('.', 1)[1].lower() if '.' in file_name else ''
+        file_data = supabase.storage.from_('content').download(file_path)
+
+        # Ambil nama file terakhir
+        file_name = file_path.split('/')[-1]
+
+        # Ambil nama asli setelah short_code_
+        if '_' in file_name:
+            original_filename = file_name.split('_', 1)[1]
+        else:
+            original_filename = file_name
+
+        # Bersihkan trailing underscore sebelum ekstensi jika ada
+        if '.' in original_filename:
+            name_part, ext = original_filename.rsplit('.', 1)
+            name_part = name_part.rstrip('_')  # hapus trailing underscore
+            original_filename = f"{name_part}.{ext}"
+        else:
+            original_filename = original_filename.rstrip('_')
+
+        # Gunakan secure_filename agar tidak ada karakter aneh
+        original_filename = secure_filename(original_filename)
+
+        file_ext = original_filename.rsplit('.', 1)[-1].lower()
         content_type_map = {
             'jpg': 'image/jpeg',
             'jpeg': 'image/jpeg',
@@ -295,10 +317,11 @@ def download(short_code):
             'pdf': 'application/pdf',
             'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         }
+
         return Response(
             file_data,
             mimetype=content_type_map.get(file_ext, 'application/octet-stream'),
-            headers={'Content-Disposition': f'attachment; filename={file_name.split("/")[-1]}'}
+            headers={'Content-Disposition': f'attachment; filename="{original_filename}"'}
         )
     except Exception as e:
         logging.error(f"Error saat download file: {str(e)}")
