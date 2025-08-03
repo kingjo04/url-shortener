@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Konten</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-2xl">
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-4">
+            {% if content_type == 'url' %}Redirecting...{% elif content_type == 'text' %}Teks{% elif content_type == 'image' %}Gambar{% else %}Dokumen{% endif %}
+        </h1>
+        {% if content_type == 'url' %}
+        <meta http-equiv="refresh" content="0;url={{ content }}">
+        <p class="text-gray-700">Mengalihkan ke <a href="{{ content }}" class="text-blue-500 hover:underline">{{ content }}</a>...</p>
+        {% elif content_type == 'text' %}
+        <p class="text-gray-700 whitespace-pre-wrap">{{ content }}</p>
+        {% elif content_type == 'image' %}
+        <img src="{{ content }}" alt="Gambar" class="max-w-full h-auto rounded-md">
+        {% elif content_type == 'document' %}
+        <p class="text-gray-700 mb-4">Unduh dokumen:</p>
+        <a href="{{ content }}" class="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition">Unduh</a>
+        {% endif %}
+        <a href="/" class="mt-4 inline-block bg-gray-200 text-gray-800 p-2 rounded-md hover:bg-gray-300 transition">Kembali ke Beranda</a>
+    </div>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pemendek Konten - LinkIt</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #6B7280, #4B5563);
+        }
+        .error, .success { display: none; }
+        .animate-spin { animation: spin 1s linear infinite; }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg transition-all duration-300 hover:shadow-2xl">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">LinkIt - Pendekkan Kontenmu!</h1>
+        {% if user %}
+        <p class="text-center text-gray-600 mb-4">Selamat datang, {{ user.email }} | <a href="#" onclick="openLogoutModal()" class="text-indigo-500 hover:underline">Logout</a></p>
+        <nav class="mb-6 text-center">
+            <a href="/dashboard" class="text-indigo-500 hover:underline font-semibold">Lihat Dashboard</a>
+        </nav>
+        <form action="/shorten" method="post" enctype="multipart/form-data" id="shorten-form" class="space-y-6">
+            <div>
+                <label for="content_type" class="block text-sm font-medium text-gray-700">Jenis Konten</label>
+                <select name="content_type" id="content_type" required
+                        class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200">
+                    <option value="url">URL</option>
+                    <option value="text">Teks</option>
+                    <option value="image">Gambar</option>
+                    <option value="document">Dokumen</option>
+                </select>
+            </div>
+            <div id="url-input" class="content-input">
+                <label for="url" class="block text-sm font-medium text-gray-700">Masukkan URL</label>
+                <input type="url" name="url" id="url"
+                       class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200"
+                       placeholder="https://example.com">
+            </div>
+            <div id="text-input" class="content-input hidden">
+                <label for="text" class="block text-sm font-medium text-gray-700">Masukkan Teks</label>
+                <textarea name="text" id="text"
+                          class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200"
+                          placeholder="Masukkan teks" rows="4"></textarea>
+            </div>
+            <div id="image-input" class="content-input hidden">
+                <label for="image" class="block text-sm font-medium text-gray-700">Unggah Gambar (JPG, PNG)</label>
+                <input type="file" name="file" id="image" accept=".jpg,.jpeg,.png"
+                       class="mt-1 block w-full p-3 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition duration-200">
+            </div>
+            <div id="document-input" class="content-input hidden">
+                <label for="document" class="block text-sm font-medium text-gray-700">Unggah Dokumen (PDF, DOCX)</label>
+                <input type="file" name="file" id="document" accept=".pdf,.docx"
+                       class="mt-1 block w-full p-3 border border-gray-300 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition duration-200">
+            </div>
+            <div>
+                <label for="custom_code" class="block text-sm font-medium text-gray-700">Kode Kustom (opsional, 3-10 karakter)</label>
+                <input type="text" name="custom_code" id="custom_code"
+                       class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200"
+                       placeholder="contoh123">
+                <p id="code-error" class="error text-sm mt-1 text-red-600">Kode kustom tidak valid! Gunakan 3-10 karakter (huruf, angka, _, -).</p>
+            </div>
+            <button type="submit" id="submit-btn"
+                    class="w-full bg-indigo-600 text-white p-3 rounded-lg hover:bg-indigo-700 transition duration-200 flex items-center justify-center">
+                <span id="btn-text">Pendekkan</span>
+                <svg id="btn-spinner" class="animate-spin h-5 w-5 ml-2 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </button>
+        </form>
+        {% if success %}
+        <div id="result" class="success mt-6 p-4 bg-green-100 rounded-lg fade-in border border-green-300">
+            <p class="text-green-800 font-semibold">{{ success }}</p>
+            <button onclick="copyToClipboard('{{ short_url }}')"
+                    class="mt-2 bg-gray-200 text-gray-800 p-2 rounded-lg hover:bg-gray-300 transition duration-200">Salin</button>
+        </div>
+        {% endif %}
+        {% if error %}
+        <div class="error mt-6 p-4 bg-red-100 rounded-lg fade-in border border-red-300">
+            <p class="text-red-800 font-semibold">{{ error }}</p>
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="text-center text-gray-600 mt-4">Silakan <a href="/login" class="text-indigo-500 hover:underline">login</a> atau <a href="/register" class="text-indigo-500 hover:underline">register</a> untuk membuat link pendek.</p>
+        {% endif %}
+    </div>
+    <!-- Modal untuk konfirmasi logout -->
+    <div id="logout-modal" class="modal">
+        <div class="modal-content fade-in">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Konfirmasi Logout</h2>
+            <p class="text-gray-600 mb-4">Yakin ingin logout?</p>
+            <div class="flex space-x-2">
+                <a href="/logout" class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200">Ya, Logout</a>
+                <button type="button" onclick="closeLogoutModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200">Batal</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Link disalin ke clipboard!');
+            });
+        }
+        function openLogoutModal() {
+            document.getElementById('logout-modal').style.display = 'flex';
+        }
+        function closeLogoutModal() {
+            document.getElementById('logout-modal').style.display = 'none';
+        }
+        document.getElementById('custom_code').addEventListener('input', function() {
+            const code = this.value;
+            const error = document.getElementById('code-error');
+            if (code && !/^[a-zA-Z0-9_-]{3,10}$/.test(code)) {
+                error.style.display = 'block';
+            } else {
+                error.style.display = 'none';
+            }
+        });
+        document.getElementById('content_type').addEventListener('change', function() {
+            document.querySelectorAll('.content-input').forEach(input => input.classList.add('hidden'));
+            const selectedInput = document.getElementById(this.value + '-input');
+            if (selectedInput) {
+                selectedInput.classList.remove('hidden');
+            }
+        });
+        document.getElementById('shorten-form').addEventListener('submit', function(e) {
+            const btn = document.getElementById('submit-btn');
+            const btnText = document.getElementById('btn-text');
+            const spinner = document.getElementById('btn-spinner');
+            btn.disabled = true;
+            btnText.textContent = 'Memproses...';
+            spinner.classList.remove('hidden');
+            setTimeout(() => {
+                btn.disabled = false;
+                btnText.textContent = 'Pendekkan';
+                spinner.classList.add('hidden');
+            }, 2000); // Simulasi loading
+        });
+        // Inisialisasi input berdasarkan pilihan awal
+        document.getElementById('content_type').dispatchEvent(new Event('change'));
+    </script>
+</body>
+</html>
