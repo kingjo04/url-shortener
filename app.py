@@ -5,9 +5,8 @@ import random
 import re
 from supabase import create_client, Client
 import os
-from dotenv import load_dotenv
 import logging
-import io
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Ganti dengan secret key aman di production
@@ -15,16 +14,13 @@ app.secret_key = os.urandom(24)  # Ganti dengan secret key aman di production
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
 
-# Muat file .env
-load_dotenv()
-
-# Inisialisasi Supabase
-SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+# Ambil variabel lingkungan dari Railway atau sistem
+SUPABASE_URL = os.environ.get('SUPABASE_URL')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 
 # Validasi kredensial Supabase
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("SUPABASE_URL dan SUPABASE_KEY harus diatur di file .env. Pastikan file .env ada di direktori proyek dan berisi nilai yang benar.")
+    raise ValueError("SUPABASE_URL dan SUPABASE_KEY harus diatur sebagai variabel lingkungan di Railway atau sistem.")
 
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -199,11 +195,13 @@ def shorten():
             # Validasi tipe file untuk gambar saja, dokumen menerima semua ekstensi
             allowed_extensions = {
                 'image': ['jpg', 'jpeg', 'png'],
-                'document': []  # Kosongkan untuk menerima semua ekstensi
+                'document': ['pdf', 'docx']  # Kembalikan validasi untuk dokumen
             }
             file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
             if content_type == 'image' and file_ext not in allowed_extensions['image']:
                 return render_template('index.html', user=session['user'], error=f'File tidak valid! Gunakan {", ".join(allowed_extensions["image"])} untuk gambar.')
+            if content_type == 'document' and file_ext not in allowed_extensions['document']:
+                return render_template('index.html', user=session['user'], error=f'File tidak valid! Gunakan {", ".join(allowed_extensions["document"])} untuk dokumen.')
             
             # Validasi ukuran file (maks 10MB)
             file.seek(0, os.SEEK_END)
@@ -272,8 +270,7 @@ def redirect_url(short_code):
 
     return render_template('content.html', content_type=content_type, content=content)
 
-from werkzeug.utils import secure_filename
-
+# Route untuk download file
 @app.route('/download/<short_code>')
 def download(short_code):
     response = supabase.table('links').select('*').eq('short_code', short_code).execute()
