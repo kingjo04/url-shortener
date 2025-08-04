@@ -67,15 +67,22 @@
             transform: scale(1.05);
             transition: transform 0.3s ease;
         }
+        .folder-item {
+            pointer-events: auto;
+            cursor: pointer;
+            opacity: 1;
+        }
         .folder-item:hover {
             background-color: #e5e7eb;
-            cursor: pointer;
         }
         .folder-item.active {
             background-color: #e5e7eb;
         }
         #sidebar {
             transition: transform 0.3s ease-in-out;
+            z-index: 40;
+            pointer-events: auto;
+            opacity: 1;
         }
         #sidebar-overlay {
             display: none;
@@ -87,6 +94,19 @@
             background: rgba(0, 0, 0, 0.5);
             z-index: 39;
         }
+        .dragging {
+            background-color: #e0e7ff;
+            opacity: 0.7;
+        }
+        #sidebar-hamburger {
+            background: #4B5563;
+            border-radius: 8px;
+            padding: 8px;
+            transition: background 0.3s ease;
+        }
+        #sidebar-hamburger:hover {
+            background: #6B7280;
+        }
         @media (max-width: 640px) {
             #sidebar {
                 transform: translateX(-100%);
@@ -94,9 +114,10 @@
                 top: 0;
                 left: 0;
                 height: 100%;
-                z-index: 40;
                 width: 80%;
                 max-width: 300px;
+                background: white;
+                box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
             }
             #sidebar.open {
                 transform: translateX(0);
@@ -104,25 +125,49 @@
             #sidebar.open + #sidebar-overlay {
                 display: block;
             }
-            #hamburger {
-                display: block;
+            #sidebar-hamburger {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
             }
             .modal-content {
                 padding: 16px;
             }
+            .main-content {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            .content-wrapper {
+                flex-grow: 1;
+            }
         }
-        @media (min-width: 641px) and (max-width: 1024px) {
+        @media (min-width: 641px) {
+            .main-content {
+                display: flex;
+                flex-direction: row;
+                align-items: stretch;
+                gap: 16px;
+            }
             #sidebar {
-                width: 33%;
-                max-width: 250px;
+                width: 25%;
+                max-width: 300px;
+                pointer-events: auto;
+                align-self: stretch;
+            }
+            #sidebar-hamburger {
+                display: none;
+            }
+            #sidebar-overlay {
+                display: none !important;
             }
             .modal-content {
                 padding: 20px;
             }
-        }
-        @media (min-width: 641px) {
-            #hamburger {
-                display: none;
+            .content-wrapper {
+                flex-grow: 1;
+                align-self: stretch;
             }
         }
         @media (max-width: 768px) {
@@ -147,17 +192,18 @@
 </head>
 <body class="min-h-screen flex flex-col dashboard-container p-2 sm:p-4 lg:p-6">
     {% include 'header.html' %}
-    <main class="flex-grow flex relative">
+    <main class="flex flex-col lg:flex-row flex-grow relative main-content">
         <!-- Ikon Hamburger untuk Layar Kecil -->
-        <button id="hamburger" class="sm:hidden text-white p-2 z-50" ondrop="dropHamburger(event)" ondragover="allowDrop(event)">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-            </svg>
-        </button>
-        <!-- Overlay untuk Menutup Sidebar -->
-        <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+        <div class="sm:hidden">
+            <button id="sidebar-hamburger" class="text-white p-2" ondrop="dropHamburger(event)" ondragover="allowDrop(event)">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                </svg>
+            </button>
+        </div>
+
         <!-- Sidebar Folder -->
-        <div id="sidebar" class="w-full sm:w-1/3 lg:w-1/4 bg-white p-4 sm:p-6 rounded-2xl shadow-xl mr-0 sm:mr-4">
+        <div id="sidebar" class="w-full sm:w-1/3 lg:w-1/4 bg-white p-4 sm:p-6 rounded-2xl shadow-xl">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-lg sm:text-xl font-bold text-gray-800">Folder</h2>
                 <button id="close-sidebar" class="sm:hidden text-gray-600 hover:text-gray-800" onclick="closeSidebar()">
@@ -166,6 +212,8 @@
                     </svg>
                 </button>
             </div>
+            <!-- Overlay untuk Menutup Sidebar -->
+            <div id="sidebar-overlay" onclick="closeSidebar()"></div>
             <form id="bulk-delete-folders-form" action="/delete_selected_folders" method="post">
                 <div id="folder-list" class="space-y-2">
                     <div 
@@ -234,7 +282,7 @@
         </div>
 
         <!-- Konten Utama -->
-        <div class="w-full sm:w-2/3 lg:w-3/4 bg-white p-4 sm:p-6 lg:p-8 rounded-2xl shadow-xl transition-all duration-300 hover:shadow-2xl">
+        <div class="content-wrapper w-full lg:w-3/4 bg-white p-4 sm:p-6 lg:p-8 rounded-2xl shadow-xl transition-all duration-300 hover:shadow-2xl">
             <h1 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-4 sm:mb-6">Dashboard - LinkIt</h1>
             {% if success %}
             <div class="success mb-4 sm:mb-6 p-3 sm:p-4 bg-green-100 rounded-lg fade-in">
@@ -250,7 +298,8 @@
                 <button 
                     type="button" 
                     onclick="openAddFolderModal()"
-                    class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition ripple scale-hover"
+                    class="bg-indigo-600 text-white px-4 py-2 text-sm font-semibold rounded-lg hover:bg-indigo-700 transition ripple scale-hover whitespace-nowrap inline-flex items-center justify-center"
+                    style="min-width: 140px;"
                 >
                     Tambah Folder
                 </button>
@@ -309,6 +358,7 @@
                                 data-folder-id="{{ link.folder_id or '' }}"
                                 draggable="true"
                                 ondragstart="drag(event)"
+                                ondragend="clearDragging()"
                             >
                                 <td class="p-2 sm:p-3">
                                     <input 
@@ -320,14 +370,28 @@
                                     >
                                 </td>
                                 <td class="p-2 sm:p-3">
-                                    <a href="/{{ link.short_code }}" class="text-indigo-500 hover:underline" target="_blank">{{ link.short_code }}</a>
+                                    <a href="/{{ link.short_code }}" class="text-indigo-500 hover:underline copy-button" data-url="/{{ link.short_code }}" target="_blank">
+                                        {{ link.short_code }}
+                                        <span class="copy-icon"><svg class="inline w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></span>
+                                        <span class="check-icon hidden"><svg class="inline w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></span>
+                                    </a>
                                 </td>
                                 <td class="p-2 sm:p-3">{{ link.content_type | capitalize }}</td>
                                 <td class="p-2 sm:p-3">
                                     {% if link.content_type == 'url' %}
-                                    <a href="{{ link.content }}" class="text-indigo-500 hover:underline" target="_blank">{{ link.content | truncate(30) }}</a>
+                                    <a href="{{ link.content }}" class="text-indigo-500 hover:underline copy-button" data-url="{{ link.content }}" target="_blank">
+                                        {{ link.content | truncate(30) }}
+                                        <span class="copy-icon"><svg class="inline w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></span>
+                                        <span class="check-icon hidden"><svg class="inline w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></span>
+                                    </a>
                                     {% elif link.content_type == 'text' %}
-                                    {{ link.content | truncate(30) }}
+                                    <span class="copy-button" data-content="{{ link.content | tojson }}" onclick="copyTextContent(this)">
+                                        {{ link.content | truncate(30) }}
+                                        <span class="copy-icon"><svg class="inline w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></span>
+                                        <span class="check-icon hidden"><svg class="inline w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></span>
+                                    </span>
+                                    {% elif link.content_type == 'image' %}
+                                    <a href="{{ link.content }}" class="text-indigo-500 hover:underline" onclick="openImageModal('{{ link.content }}'); return false;">Lihat Gambar</a>
                                     {% else %}
                                     <a href="{{ link.content }}" class="text-indigo-500 hover:underline" target="_blank">Lihat File</a>
                                     {% endif %}
@@ -601,6 +665,21 @@
             </div>
         </div>
     </div>
+    <!-- Modal untuk melihat gambar -->
+    <div id="image-modal" class="modal">
+        <div class="modal-content fade-in">
+            <img id="modal-image" src="" alt="Image Preview" class="w-full max-h-[60vh] object-contain">
+            <div class="mt-4 flex justify-end">
+                <button 
+                    type="button" 
+                    onclick="closeImageModal()" 
+                    class="bg-gray-300 text-gray-800 px-3 py-1 sm:p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover"
+                >
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
     <!-- Modal untuk konfirmasi logout -->
     <div id="logout-modal" class="modal">
         <div class="modal-content fade-in">
@@ -625,6 +704,7 @@
     </div>
     <script>
         let draggedShortCodes = [];
+        let originalRows = [];
 
         // Drag and Drop Functions
         function allowDrop(ev) {
@@ -632,9 +712,23 @@
         }
 
         function drag(ev) {
-            const shortCode = ev.currentTarget.dataset.shortCode;
-            draggedShortCodes = [shortCode];
+            const checkboxes = document.querySelectorAll('input[name="selected_links"]:checked');
+            draggedShortCodes = Array.from(checkboxes).map(checkbox => checkbox.value);
+            const currentShortCode = ev.currentTarget.dataset.shortCode;
+            if (!draggedShortCodes.includes(currentShortCode)) {
+                draggedShortCodes.push(currentShortCode);
+            }
             ev.dataTransfer.setData('short_codes', JSON.stringify(draggedShortCodes));
+            document.querySelectorAll('input[name="selected_links"]:checked').forEach(checkbox => {
+                checkbox.closest('tr').classList.add('dragging');
+            });
+            ev.currentTarget.classList.add('dragging');
+        }
+
+        function clearDragging() {
+            document.querySelectorAll('#links-table-body tr').forEach(row => {
+                row.classList.remove('dragging');
+            });
         }
 
         function drop(ev, folderId) {
@@ -658,6 +752,7 @@
                     alert('Terjadi kesalahan saat memindahkan link: ' + (xhr.responseJSON?.error || 'Unknown error'));
                 }
             });
+            clearDragging();
         }
 
         function dropHamburger(ev) {
@@ -670,70 +765,98 @@
         function openSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebar-overlay');
-            sidebar.classList.add('open');
-            overlay.style.display = 'block';
+            if (sidebar && overlay) {
+                sidebar.classList.add('open');
+                overlay.style.display = 'block';
+            }
         }
 
-        function closeSidebar() {
+        function closeSidebar(event) {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebar-overlay');
-            sidebar.classList.remove('open');
-            overlay.style.display = 'none';
+            if (sidebar && overlay && (event.target === overlay || event.target.closest('#close-sidebar'))) {
+                sidebar.classList.remove('open');
+                overlay.style.display = 'none';
+            }
         }
 
-        document.getElementById('hamburger')?.addEventListener('click', openSidebar);
-
-        // Select All Checkbox for Links
-        function toggleSelectAll() {
-            const checkboxes = document.querySelectorAll('input[name="selected_links"]');
-            const selectAll = document.getElementById('select-all');
-            checkboxes.forEach(checkbox => checkbox.checked = selectAll.checked);
-            updateDeleteButton();
+        // Copy Functions
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const notification = document.getElementById('copy-notification');
+                if (notification) {
+                    notification.style.display = 'block';
+                    setTimeout(() => {
+                        notification.style.display = 'none';
+                    }, 2000);
+                }
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
         }
 
-        // Select All Checkbox for Folders
-        function toggleSelectAllFolders() {
-            const selectAll = document.getElementById('select-all-folders');
-            const checkboxes = document.querySelectorAll('input[name="selected_folders"]');
-            checkboxes.forEach(checkbox => checkbox.checked = selectAll.checked);
-            updateDeleteFoldersButton();
+        function copyTextContent(button) {
+            const text = button.getAttribute('data-content');
+            try {
+                const decodedText = JSON.parse(text);
+                copyToClipboard(decodedText);
+            } catch (e) {
+                console.error('Failed to parse text content: ', e);
+            }
         }
 
-        // Update Delete Button State for Links
-        function updateDeleteButton() {
-            const checkboxes = document.querySelectorAll('input[name="selected_links"]:checked');
-            const deleteButton = document.getElementById('bulk-delete-button');
-            deleteButton.disabled = checkboxes.length === 0;
-        }
-
-        // Update Delete Folders Button State
-        function updateDeleteFoldersButton() {
-            const checkboxes = document.querySelectorAll('input[name="selected_folders"]:checked');
-            const selectAll = document.getElementById('select-all-folders');
-            const deleteButton = document.getElementById('bulk-delete-folders-button');
-            deleteButton.disabled = checkboxes.length === 0;
-            selectAll.checked = checkboxes.length === document.querySelectorAll('input[name="selected_folders"]').length && checkboxes.length > 0;
+        function copyLink(button) {
+            const url = button.getAttribute('data-url');
+            navigator.clipboard.writeText(url);
+            const copyIcon = button.querySelector('.copy-icon');
+            const checkIcon = button.querySelector('.check-icon');
+            if (button && copyIcon && checkIcon) {
+                button.classList.add('copy-anim');
+                copyIcon.classList.add('hidden');
+                checkIcon.classList.remove('hidden');
+                setTimeout(() => {
+                    button.classList.remove('copy-anim');
+                    copyIcon.classList.remove('hidden');
+                    checkIcon.classList.add('hidden');
+                }, 500);
+            }
         }
 
         // Modal Functions
         function openEditModal(shortCode) {
-            document.getElementById('edit-form').action = '/update/' + shortCode;
-            document.getElementById('new_code').value = '';
-            document.getElementById('code-error').classList.add('error');
-            document.getElementById('edit-modal').style.display = 'flex';
+            const modal = document.getElementById('edit-modal');
+            const form = document.getElementById('edit-form');
+            if (modal && form) {
+                form.action = `/update/${shortCode}`;
+                document.getElementById('new_code').value = '';
+                document.getElementById('code-error').style.display = 'none';
+                modal.style.display = 'flex';
+            }
         }
 
         function closeEditModal() {
-            document.getElementById('edit-modal').style.display = 'none';
+            const modal = document.getElementById('edit-modal');
+            if (modal) {
+                modal.style.display = 'none';
+                document.getElementById('new_code').value = '';
+                document.getElementById('code-error').style.display = 'none';
+            }
         }
 
         function openDeleteModal(shortCode) {
-            document.getElementById('delete-form').action = '/delete/' + shortCode;
-            document.getElementById('delete-modal').style.display = 'flex';
+            const modal = document.getElementById('delete-modal');
+            const form = document.getElementById('delete-form');
+            if (modal && form) {
+                form.action = `/delete/${shortCode}`;
+                modal.style.display = 'flex';
+            }
         }
 
         function closeDeleteModal() {
-            document.getElementById('delete-modal').style.display = 'none';
+            const modal = document.getElementById('delete-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
         }
 
         function openBulkDeleteModal() {
@@ -742,21 +865,34 @@
                 alert('Pilih setidaknya satu link untuk dihapus!');
                 return;
             }
-            document.getElementById('bulk-delete-modal').style.display = 'flex';
+            const modal = document.getElementById('bulk-delete-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+            }
         }
 
         function closeBulkDeleteModal() {
-            document.getElementById('bulk-delete-modal').style.display = 'none';
+            const modal = document.getElementById('bulk-delete-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
         }
 
         function openDeleteFolderModal(folderId, folderName) {
-            document.getElementById('delete-folder-form').action = '/delete_folder/' + folderId;
-            document.getElementById('folder-name').textContent = folderName;
-            document.getElementById('delete-folder-modal').style.display = 'flex';
+            const modal = document.getElementById('delete-folder-modal');
+            const form = document.getElementById('delete-folder-form');
+            if (modal && form) {
+                form.action = `/delete_folder/${folderId}`;
+                document.getElementById('folder-name').textContent = folderName;
+                modal.style.display = 'flex';
+            }
         }
 
         function closeDeleteFolderModal() {
-            document.getElementById('delete-folder-modal').style.display = 'none';
+            const modal = document.getElementById('delete-folder-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
         }
 
         function openBulkDeleteFoldersModal() {
@@ -765,28 +901,46 @@
                 alert('Pilih setidaknya satu folder untuk dihapus!');
                 return;
             }
-            document.getElementById('bulk-delete-folders-modal').style.display = 'flex';
+            const modal = document.getElementById('bulk-delete-folders-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+            }
         }
 
         function closeBulkDeleteFoldersModal() {
-            document.getElementById('bulk-delete-folders-modal').style.display = 'none';
+            const modal = document.getElementById('bulk-delete-folders-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
         }
 
         function openAddFolderModal() {
-            document.getElementById('folder_name').value = '';
-            document.getElementById('add-folder-modal').style.display = 'flex';
+            const modal = document.getElementById('add-folder-modal');
+            if (modal) {
+                document.getElementById('folder_name').value = '';
+                modal.style.display = 'flex';
+            }
         }
 
         function closeAddFolderModal() {
-            document.getElementById('add-folder-modal').style.display = 'none';
+            const modal = document.getElementById('add-folder-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
         }
 
         function openSelectFolderModal() {
-            document.getElementById('select-folder-modal').style.display = 'flex';
+            const modal = document.getElementById('select-folder-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+            }
         }
 
         function closeSelectFolderModal() {
-            document.getElementById('select-folder-modal').style.display = 'none';
+            const modal = document.getElementById('select-folder-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
         }
 
         function moveToSelectedFolder() {
@@ -814,73 +968,225 @@
             closeSelectFolderModal();
         }
 
+        function openImageModal(imageUrl) {
+            const modal = document.getElementById('image-modal');
+            const modalImage = document.getElementById('modal-image');
+            if (modal && modalImage) {
+                modalImage.src = imageUrl;
+                modal.style.display = 'flex';
+            }
+        }
+
+        function closeImageModal() {
+            const modal = document.getElementById('image-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
         function openLogoutModal() {
-            document.getElementById('logout-modal').style.display = 'flex';
+            const modal = document.getElementById('logout-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+            }
         }
 
         function closeLogoutModal() {
-            document.getElementById('logout-modal').style.display = 'none';
+            const modal = document.getElementById('logout-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
         }
 
-        // Search and Filter
-        function filterLinks() {
+        // Select All Checkbox for Links
+        function toggleSelectAll() {
+            const selectAll = document.getElementById('select-all');
+            const checkboxes = document.querySelectorAll('.link-checkbox');
+            if (selectAll && checkboxes) {
+                checkboxes.forEach(checkbox => checkbox.checked = selectAll.checked);
+                updateDeleteButton();
+            }
+        }
+
+        // Select All Checkbox for Folders
+        function toggleSelectAllFolders() {
+            const selectAll = document.getElementById('select-all-folders');
+            const checkboxes = document.querySelectorAll('input[name="selected_folders"]');
+            if (selectAll && checkboxes) {
+                checkboxes.forEach(checkbox => checkbox.checked = selectAll.checked);
+                updateDeleteFoldersButton();
+            }
+        }
+
+        // Update Delete Button State for Links
+        function updateDeleteButton() {
+            const checkboxes = document.querySelectorAll('.link-checkbox');
+            const deleteButton = document.getElementById('bulk-delete-button');
+            if (deleteButton) {
+                const anyChecked = Array.from(checkboxes).some(checkbox => checkbox.checked);
+                deleteButton.disabled = !anyChecked;
+                deleteButton.classList.toggle('opacity-50', !anyChecked);
+                deleteButton.classList.toggle('cursor-not-allowed', !anyChecked);
+            }
+        }
+
+        // Update Delete Folders Button State
+        function updateDeleteFoldersButton() {
+            const checkboxes = document.querySelectorAll('input[name="selected_folders"]:checked');
+            const selectAll = document.getElementById('select-all-folders');
+            const deleteButton = document.getElementById('bulk-delete-folders-button');
+            if (deleteButton && selectAll) {
+                deleteButton.disabled = checkboxes.length === 0;
+                deleteButton.classList.toggle('opacity-50', checkboxes.length === 0);
+                deleteButton.classList.toggle('cursor-not-allowed', checkboxes.length === 0);
+                selectAll.checked = checkboxes.length === document.querySelectorAll('input[name="selected_folders"]').length && checkboxes.length > 0;
+            }
+        }
+
+        // Filter Function
+        function applyFilters() {
             const searchTerm = document.getElementById('search-bar').value.toLowerCase();
             const contentType = document.getElementById('content_type_filter').value;
             const folderId = document.getElementById('folder_filter').value;
-            const rows = document.querySelectorAll('#links-table-body tr');
-            let hasVisibleRows = false;
+            const tableBody = document.getElementById('links-table-body');
+            const noLinksMessage = document.getElementById('no-links-message');
+            
+            if (!tableBody) return;
 
-            rows.forEach(row => {
+            tableBody.innerHTML = '';
+            let visibleRows = 0;
+
+            originalRows.forEach(row => {
                 const shortCode = row.dataset.shortCode.toLowerCase();
                 const content = row.dataset.content.toLowerCase();
                 const rowContentType = row.dataset.contentType;
                 const rowFolderId = row.dataset.folderId || '';
-                const matchesSearch = shortCode.includes(searchTerm) || content.includes(searchTerm);
+                
+                const matchesSearch = !searchTerm || shortCode.includes(searchTerm) || content.includes(searchTerm);
                 const matchesContentType = !contentType || rowContentType === contentType;
                 const matchesFolder = !folderId || rowFolderId === folderId;
-
+                
                 if (matchesSearch && matchesContentType && matchesFolder) {
-                    row.style.display = '';
-                    hasVisibleRows = true;
-                } else {
-                    row.style.display = 'none';
+                    tableBody.appendChild(row.cloneNode(true));
+                    visibleRows++;
                 }
             });
 
-            document.getElementById('no-links-message').style.display = hasVisibleRows ? 'none' : 'block';
+            if (noLinksMessage) {
+                noLinksMessage.style.display = visibleRows === 0 ? 'block' : 'none';
+            }
+
+            updateDeleteButton();
         }
 
+        // Folder Selection
         function selectFolder(folderId) {
-            document.getElementById('folder_filter').value = folderId;
-            filterLinks();
-            document.querySelectorAll('.folder-item').forEach(item => {
-                item.classList.remove('active');
-                if (item.dataset.folderId === folderId) {
-                    item.classList.add('active');
+            const folderFilter = document.getElementById('folder_filter');
+            if (folderFilter) {
+                folderFilter.value = folderId;
+                applyFilters();
+                document.querySelectorAll('.folder-item').forEach(item => {
+                    item.classList.remove('active');
+                    if (item.dataset.folderId === folderId) {
+                        item.classList.add('active');
+                    }
+                });
+                if (window.innerWidth <= 640) {
+                    closeSidebar({ target: document.getElementById('close-sidebar') });
                 }
-            });
-            if (window.innerWidth <= 640) {
-                closeSidebar();
             }
         }
 
-        document.getElementById('search-bar').addEventListener('input', filterLinks);
-        document.getElementById('content_type_filter').addEventListener('change', filterLinks);
-        document.getElementById('folder_filter').addEventListener('change', function(e) {
-            selectFolder(e.target.value);
+        // Update Date and Time
+        function updateDateTime() {
+            const now = new Date();
+            const dateOptions = {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                timeZone: 'Asia/Jakarta'
+            };
+            const timeOptions = {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+                timeZone: 'Asia/Jakarta'
+            };
+            const dateElement = document.getElementById('date');
+            const timeElement = document.getElementById('time');
+            if (dateElement && timeElement) {
+                dateElement.textContent = now.toLocaleString('id-ID', dateOptions);
+                timeElement.textContent = now.toLocaleTimeString('id-ID', timeOptions);
+            }
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            const tableBody = document.getElementById('links-table-body');
+            if (tableBody) {
+                originalRows = Array.from(tableBody.querySelectorAll('tr'));
+            }
+            
+            const searchBar = document.getElementById('search-bar');
+            const contentTypeFilter = document.getElementById('content_type_filter');
+            const folderFilter = document.getElementById('folder_filter');
+            
+            if (searchBar) {
+                searchBar.addEventListener('input', applyFilters);
+            }
+            
+            if (contentTypeFilter) {
+                contentTypeFilter.addEventListener('change', applyFilters);
+            }
+
+            if (folderFilter) {
+                folderFilter.addEventListener('change', function(e) {
+                    selectFolder(e.target.value);
+                });
+            }
+
+            document.querySelectorAll('.ripple').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    const rect = this.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    const ripple = document.createElement('span');
+                    ripple.style.position = 'absolute';
+                    ripple.style.background = 'rgba(255, 255, 255, 0.3)';
+                    ripple.style.borderRadius = '50%';
+                    ripple.style.transform = 'scale(0)';
+                    ripple.style.animation = 'ripple-effect 0.6s ease-out';
+                    ripple.style.left = `${x}px`;
+                    ripple.style.top = `${y}px`;
+                    this.appendChild(ripple);
+                    setTimeout(() => ripple.remove(), 600);
+                });
+            });
+
+            document.querySelectorAll('.copy-button').forEach(button => {
+                button.addEventListener('click', () => copyLink(button));
+            });
+
+            document.getElementById('sidebar-hamburger')?.addEventListener('click', openSidebar);
+            document.getElementById('sidebar-overlay')?.addEventListener('click', closeSidebar);
+
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+
+            // Show Success/Error Messages
+            if (document.querySelector('.success')) {
+                document.querySelector('.success').style.display = 'block';
+                setTimeout(() => document.querySelector('.success').style.display = 'none', 3000);
+            }
+            if (document.querySelector('.error')) {
+                document.querySelector('.error').style.display = 'block';
+                setTimeout(() => document.querySelector('.error').style.display = 'none', 3000);
+            }
         });
 
-        // Show Success/Error Messages
-        if (document.querySelector('.success')) {
-            document.querySelector('.success').style.display = 'block';
-            setTimeout(() => document.querySelector('.success').style.display = 'none', 3000);
-        }
-        if (document.querySelector('.error')) {
-            document.querySelector('.error').style.display = 'block';
-            setTimeout(() => document.querySelector('.error').style.display = 'none', 3000);
-        }
-    </script>
-    <script>
+        // Set year in footer
         document.getElementById('year').textContent = new Date().getFullYear();
     </script>
     {% include 'footer.html' %}
