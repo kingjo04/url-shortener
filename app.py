@@ -5,38 +5,35 @@ import random
 import re
 from supabase import create_client, Client
 import os
+from dotenv import load_dotenv
 import logging
+import io
 from werkzeug.utils import secure_filename
 
-app = Flask(__name__)
-app.secret_key = os.urandom(24)  # Ganti dengan secret key aman di production
+app = Flask(__name__, static_folder='static', static_url_path='/static')
+app.secret_key = os.urandom(24)
 
-# Setup logging
 logging.basicConfig(level=logging.DEBUG)
+load_dotenv()
 
-# Ambil variabel lingkungan dari Railway atau sistem
-SUPABASE_URL = os.environ.get('SUPABASE_URL')
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
-# Validasi kredensial Supabase
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("SUPABASE_URL dan SUPABASE_KEY harus diatur sebagai variabel lingkungan di Railway atau sistem.")
+    raise ValueError("SUPABASE_URL dan SUPABASE_KEY harus diatur di file .env.")
 
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     raise ValueError(f"Gagal menginisialisasi Supabase: {str(e)}")
 
-# Generate kode pendek acak
 def generate_short_code(length=6):
     characters = string.ascii_letters + string.digits
     return ''.join(random.choice(characters) for _ in range(length))
 
-# Validasi kode kustom
 def is_valid_custom_code(code):
     return bool(re.match(r'^[a-zA-Z0-9_-]{3,10}$', code))
 
-# Cek apakah kode sudah ada
 def code_exists(short_code):
     try:
         response = supabase.table('links').select('short_code').eq('short_code', short_code).execute()
@@ -45,16 +42,17 @@ def code_exists(short_code):
         logging.error(f"Error saat cek kode: {str(e)}")
         return False
 
-# Cek apakah email sudah ada
-def email_exists(email):
+def email_exists(email, exclude_user_id=None):
     try:
-        response = supabase.table('users').select('email').eq('email', email).execute()
+        query = supabase.table('users').select('email').eq('email', email)
+        if exclude_user_id:
+            query = query.neq('id', exclude_user_id)
+        response = query.execute()
         return len(response.data) > 0
     except Exception as e:
         logging.error(f"Error saat cek email: {str(e)}")
         return False
 
-# Simpan ke database
 def store_link(short_code, content_type, content, user_id):
     try:
         supabase.table('links').insert({
@@ -68,19 +66,15 @@ def store_link(short_code, content_type, content, user_id):
         logging.error(f"Error saat menyimpan link: {str(e)}")
         raise
 
-# Hapus link dan file (jika ada)
 def delete_link(short_code, user_id):
     try:
-        # Ambil data link
         response = supabase.table('links').select('*').eq('short_code', short_code).eq('user_id', user_id).execute()
         if not response.data:
             return False
         link = response.data[0]
-        # Hapus file dari storage jika gambar/dokumen
         if link['content_type'] in ('image', 'document'):
             file_name = link['content'].split('/content/')[-1]
             supabase.storage.from_('content').remove([file_name])
-        # Hapus dari tabel links
         supabase.table('links').delete().eq('short_code', short_code).eq('user_id', user_id).execute()
         logging.debug(f"Deleted link: short_code={short_code}, user_id={user_id}")
         return True
@@ -88,7 +82,6 @@ def delete_link(short_code, user_id):
         logging.error(f"Error saat hapus link: {str(e)}")
         return False
 
-# Modifikasi short_code
 def update_short_code(old_code, new_code, user_id):
     try:
         if code_exists(new_code):
@@ -102,13 +95,11 @@ def update_short_code(old_code, new_code, user_id):
         logging.error(f"Error saat update short_code: {str(e)}")
         return False, str(e)
 
-# Route untuk halaman utama
 @app.route('/')
 def index():
     user = session.get('user')
     return render_template('index.html', user=user)
 
-# Route untuk register
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -119,7 +110,7 @@ def register():
         try:
             response = supabase.table('users').insert({
                 'email': email,
-                'password': password  # Simpan password langsung (tidak aman untuk produksi)
+                'password': password
             }).execute()
             user_id = response.data[0]['id']
             session['user'] = {'email': email, 'id': user_id}
@@ -129,7 +120,6 @@ def register():
             return render_template('register.html', error=str(e))
     return render_template('register.html')
 
-# Route untuk login
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -142,23 +132,50 @@ def login():
         return render_template('login.html', error='Email atau password salah!')
     return render_template('login.html')
 
-# Route untuk logout
 @app.route('/logout')
 def logout():
     session.pop('user', None)
     return redirect(url_for('index'))
 
-# Route untuk dashboard
 @app.route('/dashboard')
 def dashboard():
     if 'user' not in session:
         return redirect(url_for('login'))
     user_id = session['user']['id']
-    response = supabase.table('links').select('*').eq('user_id', user_id).execute()
-    links = response.data
-    return render_template('dashboard.html', user=session['user'], links=links)
+    page = int(request.args.get('page', 1))
+    per_page = 10
+    query = supabase.table('links').select('*').eq('user_id', user_id)
+    total_links = len(query.execute().data)
+    total_pages = (total_links + per_page - 1) // per_page
+    links = query.order('created_at', desc=True).range((page - 1) * per_page, page * per_page - 1).execute().data
+    return render_template('dashboard.html', user=session['user'], links=links, page=page, total_pages=total_pages)
 
-# Route untuk memendekkan konten
+@app.route('/profile', methods=['GET', 'POST'])
+def profile():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    user = session['user']
+    if request.method == 'POST':
+        new_email = request.form.get('email', '').strip()
+        new_password = request.form.get('password', '').strip()
+        updates = {}
+        if new_email and new_email != user['email']:
+            if email_exists(new_email, exclude_user_id=user['id']):
+                return render_template('profile.html', user=user, error='Email sudah digunakan!')
+            updates['email'] = new_email
+        if new_password:
+            updates['password'] = new_password
+        if not updates:
+            return render_template('profile.html', user=user, error='Tidak ada perubahan yang dilakukan!')
+        try:
+            supabase.table('users').update(updates).eq('id', user['id']).execute()
+            session['user']['email'] = new_email if new_email else user['email']
+            return render_template('profile.html', user=session['user'], success='Profil berhasil diperbarui!')
+        except Exception as e:
+            logging.error(f"Error saat update profil: {str(e)}")
+            return render_template('profile.html', user=user, error=f'Gagal memperbarui profil: {str(e)}')
+    return render_template('profile.html', user=user)
+
 @app.route('/shorten', methods=['POST'])
 def shorten():
     if 'user' not in session:
@@ -168,7 +185,6 @@ def shorten():
     custom_code = request.form.get('custom_code', '').strip()
     user_id = session['user']['id']
     
-    # Validasi kode kustom
     if custom_code:
         if not is_valid_custom_code(custom_code):
             return render_template('index.html', user=session['user'], error='Kode kustom tidak valid! Gunakan 3-10 karakter (huruf, angka, _, -).')
@@ -181,7 +197,6 @@ def shorten():
             if not code_exists(short_code):
                 break
 
-    # Proses konten
     content = ''
     if content_type == 'url':
         content = request.form.get('url', '')
@@ -192,10 +207,9 @@ def shorten():
     elif content_type in ('image', 'document'):
         file = request.files.get('file')
         if file:
-            # Validasi tipe file untuk gambar saja, dokumen menerima semua ekstensi
             allowed_extensions = {
                 'image': ['jpg', 'jpeg', 'png'],
-                'document': ['pdf', 'docx']  # Kembalikan validasi untuk dokumen
+                'document': ['pdf', 'docx']
             }
             file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
             if content_type == 'image' and file_ext not in allowed_extensions['image']:
@@ -203,11 +217,10 @@ def shorten():
             if content_type == 'document' and file_ext not in allowed_extensions['document']:
                 return render_template('index.html', user=session['user'], error=f'File tidak valid! Gunakan {", ".join(allowed_extensions["document"])} untuk dokumen.')
             
-            # Validasi ukuran file (maks 10MB)
             file.seek(0, os.SEEK_END)
             file_size = file.tell()
             file.seek(0)
-            if file_size > 10 * 1024 * 1024:  # 10MB dalam bytes
+            if file_size > 10 * 1024 * 1024:
                 return render_template('index.html', user=session['user'], error='File terlalu besar! Maksimum 10MB.')
             
             file_name = f"{user_id}/{short_code}_{file.filename.replace(' ', '_')}"
@@ -219,21 +232,13 @@ def shorten():
                 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             }
             try:
-                # Upload file ke Supabase Storage
                 file_content = file.read()
-                logging.debug(f"Uploading file: {file_name}, size: {len(file_content)} bytes, extension: {file_ext}, content_type: {content_type_map.get(file_ext, 'application/octet-stream')}")
-                response = supabase.storage.from_('content').upload(
+                supabase.storage.from_('content').upload(
                     file_name,
                     file_content,
                     {'content-type': content_type_map.get(file_ext, 'application/octet-stream')}
                 )
-                logging.debug(f"Supabase upload response: {response}")
-                # Dapatkan URL publik
                 content = supabase.storage.from_('content').get_public_url(file_name)
-                logging.debug(f"Generated public URL: {content}")
-                # Verifikasi URL publik
-                test_response = supabase.storage.from_('content').get_public_url(file_name)
-                logging.debug(f"Test public URL response: {test_response}")
             except Exception as e:
                 logging.error(f"Error saat upload file: {str(e)}")
                 return render_template('index.html', user=session['user'], error=f'Gagal mengunggah file: {str(e)}')
@@ -243,20 +248,15 @@ def shorten():
     if not content:
         return render_template('index.html', user=session['user'], error='Konten tidak valid! Pastikan URL, teks, atau file diisi.')
 
-    # Simpan ke database
     try:
         store_link(short_code, content_type, content, user_id)
     except Exception as e:
         return render_template('index.html', user=session['user'], error=f'Gagal menyimpan link: {str(e)}')
 
-    # Buat link pendek
     domain = urlparse(request.base_url).netloc
     short_url = f"http://{domain}/{short_code}"
-    logging.debug(f"Generated short URL: {short_url}")
-
     return render_template('index.html', user=session['user'], short_url=short_url, success=f'Berhasil memendekkan! Link Anda: {short_url}')
 
-# Route untuk menampilkan konten
 @app.route('/<short_code>')
 def redirect_url(short_code):
     response = supabase.table('links').select('*').eq('short_code', short_code).execute()
@@ -266,11 +266,9 @@ def redirect_url(short_code):
     link = response.data[0]
     content_type = link['content_type']
     content = link['content']
-    logging.debug(f"Redirecting to: short_code={short_code}, content_type={content_type}, content={content}")
+    user = session.get('user')
+    return render_template('content.html', content_type=content_type, content=content, short_code=short_code, user=user)
 
-    return render_template('content.html', content_type=content_type, content=content)
-
-# Route untuk download file
 @app.route('/download/<short_code>')
 def download(short_code):
     response = supabase.table('links').select('*').eq('short_code', short_code).execute()
@@ -278,53 +276,54 @@ def download(short_code):
         return render_template('404.html'), 404
 
     link = response.data[0]
-    if link['content_type'] not in ('image', 'document'):
-        return redirect(url_for('dashboard', error='Konten bukan file yang bisa diunduh!'))
+    content_type = link['content_type']
+    content = link['content']
 
-    file_path = link['content'].split('/content/')[-1]
+    if content_type == 'url':
+        return redirect(url_for('dashboard', error='Konten URL tidak dapat diunduh!'))
+
     try:
-        # Download file dari Supabase Storage
-        file_data = supabase.storage.from_('content').download(file_path)
-
-        # Ambil nama file terakhir
-        file_name = file_path.split('/')[-1]
-
-        # Ambil nama asli setelah short_code_
-        if '_' in file_name:
-            original_filename = file_name.split('_', 1)[1]
+        if content_type == 'text':
+            file_data = content.encode('utf-8')
+            original_filename = secure_filename(f"{short_code}.txt")
+            return Response(
+                file_data,
+                mimetype='text/plain',
+                headers={'Content-Disposition': f'attachment; filename="{original_filename}"'}
+            )
+        elif content_type in ('image', 'document'):
+            file_path = content.split('/content/')[-1]
+            file_data = supabase.storage.from_('content').download(file_path)
+            if '_' in file_path:
+                original_filename = file_path.split('_', 1)[1]
+            else:
+                original_filename = file_path
+            if '.' in original_filename:
+                name_part, ext = original_filename.rsplit('.', 1)
+                name_part = name_part.rstrip('_')
+                original_filename = f"{name_part}.{ext}"
+            else:
+                original_filename = original_filename.rstrip('_')
+            original_filename = secure_filename(original_filename)
+            file_ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
+            content_type_map = {
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'png': 'image/png',
+                'pdf': 'application/pdf',
+                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            }
+            return Response(
+                file_data,
+                mimetype=content_type_map.get(file_ext, 'application/octet-stream'),
+                headers={'Content-Disposition': f'attachment; filename="{original_filename}"'}
+            )
         else:
-            original_filename = file_name
-
-        # Bersihkan trailing underscore sebelum ekstensi jika ada
-        if '.' in original_filename:
-            name_part, ext = original_filename.rsplit('.', 1)
-            name_part = name_part.rstrip('_')  # hapus trailing underscore
-            original_filename = f"{name_part}.{ext}"
-        else:
-            original_filename = original_filename.rstrip('_')
-
-        # Gunakan secure_filename agar tidak ada karakter aneh
-        original_filename = secure_filename(original_filename)
-
-        file_ext = original_filename.rsplit('.', 1)[-1].lower()
-        content_type_map = {
-            'jpg': 'image/jpeg',
-            'jpeg': 'image/jpeg',
-            'png': 'image/png',
-            'pdf': 'application/pdf',
-            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        }
-
-        return Response(
-            file_data,
-            mimetype=content_type_map.get(file_ext, 'application/octet-stream'),
-            headers={'Content-Disposition': f'attachment; filename="{original_filename}"'}
-        )
+            return redirect(url_for('dashboard', error='Konten tidak dapat diunduh!'))
     except Exception as e:
         logging.error(f"Error saat download file: {str(e)}")
         return redirect(url_for('dashboard', error=f'Gagal mengunduh file: {str(e)}'))
 
-# Route untuk hapus link
 @app.route('/delete/<short_code>', methods=['POST'])
 def delete(short_code):
     if 'user' not in session:
@@ -334,7 +333,6 @@ def delete(short_code):
         return redirect(url_for('dashboard', success='Link berhasil dihapus!'))
     return redirect(url_for('dashboard', error='Gagal menghapus link!'))
 
-# Route untuk modifikasi short_code
 @app.route('/update/<short_code>', methods=['POST'])
 def update(short_code):
     if 'user' not in session:
@@ -345,6 +343,22 @@ def update(short_code):
     if success:
         return redirect(url_for('dashboard', success='Link berhasil diperbarui!'))
     return redirect(url_for('dashboard', error=message))
+
+@app.route('/delete_selected', methods=['POST'])
+def delete_selected():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    user_id = session['user']['id']
+    selected_links = request.form.getlist('selected_links')
+    if not selected_links:
+        return redirect(url_for('dashboard', error='Tidak ada link yang dipilih!'))
+    try:
+        for short_code in selected_links:
+            delete_link(short_code, user_id)
+        return redirect(url_for('dashboard', success='Link terpilih berhasil dihapus!'))
+    except Exception as e:
+        logging.error(f"Bulk delete error: {str(e)}")
+        return redirect(url_for('dashboard', error='Terjadi kesalahan saat menghapus link!'))
 
 if __name__ == '__main__':
     app.run(debug=True)

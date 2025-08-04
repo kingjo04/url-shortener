@@ -29,6 +29,7 @@
             background: rgba(0, 0, 0, 0.5);
             align-items: center;
             justify-content: center;
+            z-index: 50;
         }
         .modal-content {
             background: white;
@@ -38,72 +39,143 @@
             width: 100%;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+        .ripple {
+            position: relative;
+            overflow: hidden;
+        }
+        .ripple::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.2);
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            transform: scale(0);
+            border-radius: 50%;
+            animation: ripple-effect 0.6s ease-out;
+        }
+        @keyframes ripple-effect {
+            to {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+        .scale-hover:hover {
+            transform: scale(1.05);
+            transition: transform 0.3s ease;
+        }
     </style>
 </head>
-<body class="min-h-screen p-4">
-    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-4xl mx-auto transition-all duration-300 hover:shadow-2xl">
-        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Dashboard - LinkIt</h1>
-        <p class="text-center text-gray-600 mb-4">Selamat datang, {{ user.email }} | <a href="#" onclick="openLogoutModal()" class="text-indigo-500 hover:underline">Logout</a></p>
-        <nav class="mb-6 text-center">
-            <a href="/" class="text-indigo-500 hover:underline font-semibold">Kembali ke Beranda</a>
-        </nav>
-        {% if success %}
-        <div class="success mb-6 p-4 bg-green-100 rounded-lg fade-in">
-            <p class="text-green-800 font-semibold">{{ success }}</p>
-        </div>
-        {% endif %}
-        {% if error %}
-        <div class="error mb-6 p-4 bg-red-100 rounded-lg fade-in">
-            <p class="text-red-800 font-semibold">{{ error }}</p>
-        </div>
-        {% endif %}
-        <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-                <thead>
-                    <tr class="bg-indigo-600 text-white">
-                        <th class="p-3 rounded-tl-lg">Kode Pendek</th>
-                        <th class="p-3">Tipe Konten</th>
-                        <th class="p-3">Konten</th>
-                        <th class="p-3">Download</th>
-                        <th class="p-3 rounded-tr-lg">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for link in links %}
-                    <tr class="border-b hover:bg-gray-50 transition duration-200">
-                        <td class="p-3">
-                            <a href="/{{ link.short_code }}" class="text-indigo-500 hover:underline" target="_blank">{{ link.short_code }}</a>
-                        </td>
-                        <td class="p-3">{{ link.content_type | capitalize }}</td>
-                        <td class="p-3">
-                            {% if link.content_type == 'url' %}
-                            <a href="{{ link.content }}" class="text-indigo-500 hover:underline" target="_blank">{{ link.content | truncate(30) }}</a>
-                            {% elif link.content_type == 'text' %}
-                            {{ link.content | truncate(30) }}
-                            {% else %}
-                            <a href="{{ link.content }}" class="text-indigo-500 hover:underline" target="_blank">Lihat File</a>
-                            {% endif %}
-                        </td>
-                        <td class="p-3">
-                            {% if link.content_type in ('image', 'document') %}
-                            <a href="/download/{{ link.short_code }}" class="text-indigo-500 hover:underline">Download</a>
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
-                        <td class="p-3 flex space-x-2">
-                            <button onclick="openEditModal('{{ link.short_code }}')" class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200">Ubah</button>
-                            <button onclick="openDeleteModal('{{ link.short_code }}')" class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200">Hapus</button>
-                        </td>
-                    </tr>
+<body class="min-h-screen flex flex-col p-4">
+    {% include 'header.html' %}
+    <main class="flex-grow">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-4xl mx-auto transition-all duration-300 hover:shadow-2xl">
+            <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Dashboard - LinkIt</h1>
+            {% if success %}
+            <div class="success mb-6 p-4 bg-green-100 rounded-lg fade-in">
+                <p class="text-green-800 font-semibold">{{ success }}</p>
+            </div>
+            {% endif %}
+            {% if error %}
+            <div class="error mb-6 p-4 bg-red-100 rounded-lg fade-in">
+                <p class="text-red-800 font-semibold">{{ error }}</p>
+            </div>
+            {% endif %}
+            <div class="mb-4 flex flex-col sm:flex-row sm:space-x-4">
+                <input type="text" id="search-bar" placeholder="Cari kode pendek atau konten..."
+                       class="p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-1/2 mb-2 sm:mb-0">
+                <select id="content_type_filter" class="p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-1/2">
+                    <option value="">Semua Tipe</option>
+                    <option value="url">URL</option>
+                    <option value="text">Teks</option>
+                    <option value="image">Gambar</option>
+                    <option value="document">Dokumen</option>
+                </select>
+            </div>
+            <form id="bulk-delete-form" action="/delete_selected" method="post">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse" id="links-table">
+                        <thead>
+                            <tr class="bg-indigo-600 text-white">
+                                <th class="p-3 rounded-tl-lg">
+                                    <input type="checkbox" id="select-all" onclick="toggleSelectAll()">
+                                </th>
+                                <th class="p-3">Kode Pendek</th>
+                                <th class="p-3">Tipe Konten</th>
+                                <th class="p-3">Konten</th>
+                                <th class="p-3">Download</th>
+                                <th class="p-3 rounded-tr-lg">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="links-table-body">
+                            {% for link in links %}
+                            <tr class="border-b hover:bg-gray-50 transition duration-200" data-content-type="{{ link.content_type }}"
+                                data-short-code="{{ link.short_code }}" data-content="{{ link.content | truncate(30) }}">
+                                <td class="p-3">
+                                    <input type="checkbox" name="selected_links" value="{{ link.short_code }}"
+                                           class="link-checkbox" onchange="updateDeleteButton()">
+                                </td>
+                                <td class="p-3">
+                                    <a href="/{{ link.short_code }}" class="text-indigo-500 hover:underline" target="_blank">{{ link.short_code }}</a>
+                                </td>
+                                <td class="p-3">{{ link.content_type | capitalize }}</td>
+                                <td class="p-3">
+                                    {% if link.content_type == 'url' %}
+                                    <a href="{{ link.content }}" class="text-indigo-500 hover:underline" target="_blank">{{ link.content | truncate(30) }}</a>
+                                    {% elif link.content_type == 'text' %}
+                                    {{ link.content | truncate(30) }}
+                                    {% else %}
+                                    <a href="{{ link.content }}" class="text-indigo-500 hover:underline" target="_blank">Lihat File</a>
+                                    {% endif %}
+                                </td>
+                                <td class="p-3">
+                                    {% if link.content_type in ('text', 'image', 'document') %}
+                                    <a href="/download/{{ link.short_code }}" class="text-indigo-500 hover:underline">Download</a>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td class="p-3 flex space-x-2">
+                                    <button type="button" onclick="openEditModal('{{ link.short_code }}')"
+                                            class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200 ripple scale-hover">Ubah</button>
+                                    <button type="button" onclick="openDeleteModal('{{ link.short_code }}')"
+                                            class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200 ripple scale-hover">Hapus</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if not links %}
+                <p class="text-center text-gray-600 mt-6" id="no-links-message">Belum ada link yang dibuat.</p>
+                {% endif %}
+                <div class="mt-6 flex justify-center">
+                    <button type="button" id="bulk-delete-button" onclick="openBulkDeleteModal()"
+                            class="bg-red-500 text-white p-3 rounded-lg transition duration-200 ripple scale-hover"
+                            disabled>
+                        Hapus Terpilih
+                    </button>
+                </div>
+                <div class="mt-6 flex justify-center space-x-2" id="pagination-controls">
+                    {% if page > 1 %}
+                    <a href="/dashboard?page={{ page - 1 }}"
+                       class="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 transition ripple scale-hover">Sebelumnya</a>
+                    {% endif %}
+                    {% for p in range(1, total_pages + 1) %}
+                    <a href="/dashboard?page={{ p }}"
+                       class="p-2 {% if p == page %}bg-indigo-600 text-white{% else %}bg-gray-200 text-gray-800{% endif %} rounded-lg hover:bg-indigo-500 hover:text-white transition ripple">{{ p }}</a>
                     {% endfor %}
-                </tbody>
-            </table>
+                    {% if page < total_pages %}
+                    <a href="/dashboard?page={{ page + 1 }}"
+                       class="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 transition ripple scale-hover">Selanjutnya</a>
+                    {% endif %}
+                </div>
+            </form>
         </div>
-        {% if not links %}
-        <p class="text-center text-gray-600 mt-6">Belum ada link yang dibuat.</p>
-        {% endif %}
-    </div>
+    </main>
+    {% include 'footer.html' %}
     <!-- Modal untuk modifikasi kode pendek -->
     <div id="edit-modal" class="modal">
         <div class="modal-content fade-in">
@@ -115,8 +187,8 @@
                        placeholder="contoh123">
                 <p id="code-error" class="error text-sm mt-1 text-red-600">Kode kustom tidak valid! Gunakan 3-10 karakter (huruf, angka, _, -).</p>
                 <div class="mt-4 flex space-x-2">
-                    <button type="submit" class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200">Simpan</button>
-                    <button type="button" onclick="closeEditModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200">Batal</button>
+                    <button type="submit" class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200 ripple scale-hover">Simpan</button>
+                    <button type="button" onclick="closeEditModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover">Batal</button>
                 </div>
             </form>
         </div>
@@ -128,10 +200,21 @@
             <p class="text-gray-600 mb-4">Yakin ingin menghapus link ini?</p>
             <form id="delete-form" action="" method="post">
                 <div class="flex space-x-2">
-                    <button type="submit" class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200">Ya, Hapus</button>
-                    <button type="button" onclick="closeDeleteModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200">Batal</button>
+                    <button type="submit" class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200 ripple scale-hover">Ya, Hapus</button>
+                    <button type="button" onclick="closeDeleteModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover">Batal</button>
                 </div>
             </form>
+        </div>
+    </div>
+    <!-- Modal untuk konfirmasi hapus terpilih -->
+    <div id="bulk-delete-modal" class="modal">
+        <div class="modal-content fade-in">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Konfirmasi Hapus Terpilih</h2>
+            <p class="text-gray-600 mb-4">Yakin ingin menghapus link yang dipilih?</p>
+            <div class="flex space-x-2">
+                <button type="submit" form="bulk-delete-form" class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200 ripple scale-hover">Ya, Hapus</button>
+                <button type="button" onclick="closeBulkDeleteModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover">Batal</button>
+            </div>
         </div>
     </div>
     <!-- Modal untuk konfirmasi logout -->
@@ -140,48 +223,11 @@
             <h2 class="text-xl font-bold text-gray-800 mb-4">Konfirmasi Logout</h2>
             <p class="text-gray-600 mb-4">Yakin ingin logout?</p>
             <div class="flex space-x-2">
-                <a href="/logout" class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200">Ya, Logout</a>
-                <button type="button" onclick="closeLogoutModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200">Batal</button>
+                <a href="/logout" class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200 ripple scale-hover">Ya, Logout</a>
+                <button type="button" onclick="closeLogoutModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover">Batal</button>
             </div>
         </div>
     </div>
-    <script>
-        function openEditModal(shortCode) {
-            const modal = document.getElementById('edit-modal');
-            const form = document.getElementById('edit-form');
-            form.action = `/update/${shortCode}`;
-            modal.style.display = 'flex';
-        }
-        function closeEditModal() {
-            const modal = document.getElementById('edit-modal');
-            modal.style.display = 'none';
-            document.getElementById('new_code').value = '';
-            document.getElementById('code-error').style.display = 'none';
-        }
-        function openDeleteModal(shortCode) {
-            const modal = document.getElementById('delete-modal');
-            const form = document.getElementById('delete-form');
-            form.action = `/delete/${shortCode}`;
-            modal.style.display = 'flex';
-        }
-        function closeDeleteModal() {
-            document.getElementById('delete-modal').style.display = 'none';
-        }
-        function openLogoutModal() {
-            document.getElementById('logout-modal').style.display = 'flex';
-        }
-        function closeLogoutModal() {
-            document.getElementById('logout-modal').style.display = 'none';
-        }
-        document.getElementById('new_code').addEventListener('input', function() {
-            const code = this.value;
-            const error = document.getElementById('code-error');
-            if (code && !/^[a-zA-Z0-9_-]{3,10}$/.test(code)) {
-                error.style.display = 'block';
-            } else {
-                error.style.display = 'none';
-            }
-        });
-    </script>
+    <script src="/static/js/scripts.js"></script>
 </body>
 </html>
