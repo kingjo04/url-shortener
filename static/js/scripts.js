@@ -9,7 +9,19 @@ function copyToClipboard(text) {
                 notification.style.display = 'none';
             }, 2000);
         }
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
     });
+}
+
+function copyTextContent(button) {
+    const text = button.getAttribute('data-content');
+    try {
+        const decodedText = JSON.parse(text);
+        copyToClipboard(decodedText);
+    } catch (e) {
+        console.error('Failed to parse text content: ', e);
+    }
 }
 
 function copyLink(button) {
@@ -26,6 +38,24 @@ function copyLink(button) {
             copyIcon.classList.remove('hidden');
             checkIcon.classList.add('hidden');
         }, 500);
+    }
+}
+
+function toggleMobileMenu() {
+    const menu = document.getElementById('mobile-menu');
+    if (menu) {
+        menu.classList.toggle('hidden');
+        menu.classList.toggle('opacity-0');
+        menu.classList.toggle('opacity-100');
+    }
+}
+
+function closeMobileMenu() {
+    const menu = document.getElementById('mobile-menu');
+    if (menu) {
+        menu.classList.add('hidden');
+        menu.classList.remove('opacity-100');
+        menu.classList.add('opacity-0');
     }
 }
 
@@ -91,6 +121,22 @@ function closeBulkDeleteModal() {
     }
 }
 
+function openImageModal(imageUrl) {
+    const modal = document.getElementById('image-modal');
+    const modalImage = document.getElementById('modal-image');
+    if (modal && modalImage) {
+        modalImage.src = imageUrl;
+        modal.style.display = 'flex';
+    }
+}
+
+function closeImageModal() {
+    const modal = document.getElementById('image-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
 function toggleSelectAll() {
     const selectAll = document.getElementById('select-all');
     const checkboxes = document.querySelectorAll('.link-checkbox');
@@ -143,6 +189,31 @@ function applyFilters() {
     updateDeleteButton();
 }
 
+function updateDateTime() {
+    const now = new Date();
+    const dateOptions = {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'Asia/Jakarta'
+    };
+    const timeOptions = {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Jakarta'
+    };
+    const dateElement = document.getElementById('date');
+    const timeElement = document.getElementById('time');
+    if (dateElement && timeElement) {
+        dateElement.textContent = now.toLocaleString('id-ID', dateOptions);
+        timeElement.textContent = now.toLocaleTimeString('id-ID', timeOptions);
+    }
+}
+
+
 document.addEventListener('DOMContentLoaded', () => {
     const tableBody = document.getElementById('links-table-body');
     if (tableBody) {
@@ -177,28 +248,10 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => ripple.remove(), 600);
         });
     });
+
+    updateDateTime();
+    setInterval(updateDateTime, 1000);
 });
-
-function updateDateTime() {
-    const now = new Date();
-    const options = {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        timeZone: 'Asia/Jakarta'
-    };
-    const datetimeElement = document.getElementById('datetime');
-    if (datetimeElement) {
-        datetimeElement.textContent = now.toLocaleString('id-ID', options);
-    }
-}
-
-updateDateTime();
-setInterval(updateDateTime, 1000);
 
 document.querySelectorAll('.copy-button').forEach(button => {
     button.addEventListener('click', () => copyLink(button));
