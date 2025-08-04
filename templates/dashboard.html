@@ -6,6 +6,7 @@
     <title>Dashboard - LinkIt</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         body {
             font-family: 'Poppins', sans-serif;
@@ -66,12 +67,138 @@
             transform: scale(1.05);
             transition: transform 0.3s ease;
         }
+        .folder-item:hover {
+            background-color: #e5e7eb;
+            cursor: pointer;
+        }
+        .folder-item.active {
+            background-color: #e5e7eb;
+        }
+        #sidebar {
+            transition: transform 0.3s ease-in-out;
+        }
+        #sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 39;
+        }
+        @media (max-width: 640px) {
+            #sidebar {
+                transform: translateX(-100%);
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100%;
+                z-index: 40;
+                width: 75%;
+            }
+            #sidebar.open {
+                transform: translateX(0);
+            }
+            #sidebar.open + #sidebar-overlay {
+                display: block;
+            }
+            #hamburger {
+                display: block;
+            }
+        }
+        @media (min-width: 641px) {
+            #hamburger {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col p-4">
     {% include 'header.html' %}
-    <main class="flex-grow">
-        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-4xl mx-auto transition-all duration-300 hover:shadow-2xl">
+    <main class="flex-grow flex relative">
+        <!-- Ikon Hamburger untuk Layar Kecil -->
+        <button id="hamburger" class="sm:hidden text-white p-2" ondrop="dropHamburger(event)" ondragover="allowDrop(event)">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+            </svg>
+        </button>
+        <!-- Overlay untuk Menutup Sidebar -->
+        <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+        <!-- Sidebar Folder -->
+        <div id="sidebar" class="w-1/4 bg-white p-6 rounded-2xl shadow-xl mr-4 sm:mr-4 sm:block">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-800">Folder</h2>
+                <button id="close-sidebar" class="sm:hidden text-gray-600 hover:text-gray-800" onclick="closeSidebar()">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <form id="bulk-delete-folders-form" action="/delete_selected_folders" method="post">
+                <div id="folder-list" class="space-y-2">
+                    <div 
+                        class="folder-item flex items-center justify-between p-2 rounded {% if not selected_folder %}active{% endif %}" 
+                        data-folder-id="null"
+                        ondrop="drop(event, 'null')"
+                        ondragover="allowDrop(event)"
+                        onclick="selectFolder('null')"
+                    >
+                        <div class="flex items-center">
+                            <input type="checkbox" class="folder-checkbox mr-2" disabled>
+                            <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                            </svg>
+                            Semua Folder
+                        </div>
+                    </div>
+                    {% for folder in folders %}
+                    <div 
+                        class="folder-item flex items-center justify-between p-2 rounded {% if selected_folder == folder.id %}active{% endif %}" 
+                        data-folder-id="{{ folder.id }}"
+                        ondrop="drop(event, {{ folder.id }})"
+                        ondragover="allowDrop(event)"
+                        onclick="selectFolder({{ folder.id }})"
+                    >
+                        <div class="flex items-center">
+                            <input 
+                                type="checkbox" 
+                                name="selected_folders" 
+                                value="{{ folder.id }}" 
+                                class="folder-checkbox mr-2" 
+                                onchange="updateDeleteFoldersButton()"
+                            >
+                            <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                            </svg>
+                            {{ folder.name }}
+                        </div>
+                        <button 
+                            type="button" 
+                            onclick="openDeleteFolderModal({{ folder.id }}, '{{ folder.name }}')"
+                            class="bg-red-100 text-red-600 px-2 py-1 rounded-lg hover:bg-red-200 hover:scale-105 transition duration-200 ripple scale-hover"
+                        >
+                            Hapus
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-4">
+                    <button 
+                        type="button" 
+                        id="bulk-delete-folders-button" 
+                        onclick="openBulkDeleteFoldersModal()" 
+                        class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition ripple scale-hover w-full" 
+                        disabled
+                    >
+                        Hapus Folder Terpilih
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Konten Utama -->
+        <div class="w-full sm:w-3/4 bg-white p-8 rounded-2xl shadow-xl transition-all duration-300 hover:shadow-2xl">
             <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Dashboard - LinkIt</h1>
             {% if success %}
             <div class="success mb-6 p-4 bg-green-100 rounded-lg fade-in">
@@ -84,16 +211,42 @@
             </div>
             {% endif %}
             <div class="mb-4 flex flex-col sm:flex-row sm:space-x-4">
-                <input type="text" id="search-bar" placeholder="Cari kode pendek atau konten..."
-                       class="p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-1/2 mb-2 sm:mb-0">
-                <select id="content_type_filter" class="p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-1/2">
+                <button 
+                    type="button" 
+                    onclick="openAddFolderModal()"
+                    class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition ripple scale-hover mb-2 sm:mb-0"
+                >
+                    Tambah Folder
+                </button>
+                <input 
+                    type="text" 
+                    id="search-bar" 
+                    placeholder="Cari kode pendek atau konten..." 
+                    class="p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-1/3"
+                >
+                <select 
+                    id="content_type_filter" 
+                    class="p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-1/3"
+                >
                     <option value="">Semua Tipe</option>
                     <option value="url">URL</option>
                     <option value="text">Teks</option>
                     <option value="image">Gambar</option>
                     <option value="document">Dokumen</option>
                 </select>
+                <select 
+                    id="folder_filter" 
+                    class="p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-1/3 mt-2 sm:mt-0"
+                >
+                    <option value="">Semua Folder</option>
+                    {% for folder in folders %}
+                    <option value="{{ folder.id }}" {% if selected_folder == folder.id %}selected{% endif %}>
+                        {{ folder.name }}
+                    </option>
+                    {% endfor %}
+                </select>
             </div>
+
             <form id="bulk-delete-form" action="/delete_selected" method="post">
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse" id="links-table">
@@ -105,17 +258,30 @@
                                 <th class="p-3">Kode Pendek</th>
                                 <th class="p-3">Tipe Konten</th>
                                 <th class="p-3">Konten</th>
+                                <th class="p-3">Folder</th>
                                 <th class="p-3">Download</th>
                                 <th class="p-3 rounded-tr-lg">Aksi</th>
                             </tr>
                         </thead>
                         <tbody id="links-table-body">
                             {% for link in links %}
-                            <tr class="border-b hover:bg-gray-50 transition duration-200" data-content-type="{{ link.content_type }}"
-                                data-short-code="{{ link.short_code }}" data-content="{{ link.content | truncate(30) }}">
+                            <tr 
+                                class="border-b hover:bg-gray-50 transition duration-200" 
+                                data-content-type="{{ link.content_type }}" 
+                                data-short-code="{{ link.short_code }}" 
+                                data-content="{{ link.content | truncate(30) }}"
+                                data-folder-id="{{ link.folder_id or '' }}"
+                                draggable="true"
+                                ondragstart="drag(event)"
+                            >
                                 <td class="p-3">
-                                    <input type="checkbox" name="selected_links" value="{{ link.short_code }}"
-                                           class="link-checkbox" onchange="updateDeleteButton()">
+                                    <input 
+                                        type="checkbox" 
+                                        name="selected_links" 
+                                        value="{{ link.short_code }}" 
+                                        class="link-checkbox" 
+                                        onchange="updateDeleteButton()"
+                                    >
                                 </td>
                                 <td class="p-3">
                                     <a href="/{{ link.short_code }}" class="text-indigo-500 hover:underline" target="_blank">{{ link.short_code }}</a>
@@ -131,6 +297,17 @@
                                     {% endif %}
                                 </td>
                                 <td class="p-3">
+                                    {% if link.folder_id %}
+                                    {% for folder in folders %}
+                                    {% if folder.id == link.folder_id %}
+                                    {{ folder.name }}
+                                    {% endif %}
+                                    {% endfor %}
+                                    {% else %}
+                                    Tidak Ada
+                                    {% endif %}
+                                </td>
+                                <td class="p-3">
                                     {% if link.content_type in ('text', 'image', 'document') %}
                                     <a href="/download/{{ link.short_code }}" class="text-indigo-500 hover:underline">Download</a>
                                     {% else %}
@@ -138,10 +315,20 @@
                                     {% endif %}
                                 </td>
                                 <td class="p-3 flex space-x-2">
-                                    <button type="button" onclick="openEditModal('{{ link.short_code }}')"
-                                            class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200 ripple scale-hover">Ubah</button>
-                                    <button type="button" onclick="openDeleteModal('{{ link.short_code }}')"
-                                            class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200 ripple scale-hover">Hapus</button>
+                                    <button 
+                                        type="button" 
+                                        onclick="openEditModal('{{ link.short_code }}')" 
+                                        class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200 ripple scale-hover"
+                                    >
+                                        Ubah
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onclick="openDeleteModal('{{ link.short_code }}')" 
+                                        class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200 ripple scale-hover"
+                                    >
+                                        Hapus
+                                    </button>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -152,69 +339,204 @@
                 <p class="text-center text-gray-600 mt-6" id="no-links-message">Belum ada link yang dibuat.</p>
                 {% endif %}
                 <div class="mt-6 flex justify-center">
-                    <button type="button" id="bulk-delete-button" onclick="openBulkDeleteModal()"
-                            class="bg-red-500 text-white p-3 rounded-lg transition duration-200 ripple scale-hover"
-                            disabled>
+                    <button 
+                        type="button" 
+                        id="bulk-delete-button" 
+                        onclick="openBulkDeleteModal()" 
+                        class="bg-red-500 text-white p-3 rounded-lg transition duration-200 ripple scale-hover" 
+                        disabled
+                    >
                         Hapus Terpilih
                     </button>
                 </div>
                 <div class="mt-6 flex justify-center space-x-2" id="pagination-controls">
                     {% if page > 1 %}
-                    <a href="/dashboard?page={{ page - 1 }}"
-                       class="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 transition ripple scale-hover">Sebelumnya</a>
+                    <a 
+                        href="/dashboard?page={{ page - 1 }}&folder_id={{ selected_folder or '' }}&content_type={{ request.args.get('content_type', '') }}" 
+                        class="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 transition ripple scale-hover"
+                    >
+                        Sebelumnya
+                    </a>
                     {% endif %}
                     {% for p in range(1, total_pages + 1) %}
-                    <a href="/dashboard?page={{ p }}"
-                       class="p-2 {% if p == page %}bg-indigo-600 text-white{% else %}bg-gray-200 text-gray-800{% endif %} rounded-lg hover:bg-indigo-500 hover:text-white transition ripple">{{ p }}</a>
+                    <a 
+                        href="/dashboard?page={{ p }}&folder_id={{ selected_folder or '' }}&content_type={{ request.args.get('content_type', '') }}" 
+                        class="p-2 {% if p == page %}bg-indigo-600 text-white{% else %}bg-gray-200 text-gray-800{% endif %} rounded-lg hover:bg-indigo-500 hover:text-white transition ripple"
+                    >
+                        {{ p }}
+                    </a>
                     {% endfor %}
                     {% if page < total_pages %}
-                    <a href="/dashboard?page={{ page + 1 }}"
-                       class="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 transition ripple scale-hover">Selanjutnya</a>
+                    <a 
+                        href="/dashboard?page={{ page + 1 }}&folder_id={{ selected_folder or '' }}&content_type={{ request.args.get('content_type', '') }}" 
+                        class="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 transition ripple scale-hover"
+                    >
+                        Selanjutnya
+                    </a>
                     {% endif %}
                 </div>
             </form>
         </div>
     </main>
-    {% include 'footer.html' %}
     <!-- Modal untuk modifikasi kode pendek -->
     <div id="edit-modal" class="modal">
         <div class="modal-content fade-in">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Ubah Kode Pendek</h2>
             <form id="edit-form" action="" method="post">
                 <label for="new_code" class="block text-sm font-medium text-gray-700">Kode Baru (3-10 karakter)</label>
-                <input type="text" name="new_code" id="new_code" required
-                       class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200"
-                       placeholder="contoh123">
+                <input 
+                    type="text" 
+                    name="new_code" 
+                    id="new_code" 
+                    required 
+                    class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200" 
+                    placeholder="contoh123"
+                >
                 <p id="code-error" class="error text-sm mt-1 text-red-600">Kode kustom tidak valid! Gunakan 3-10 karakter (huruf, angka, _, -).</p>
                 <div class="mt-4 flex space-x-2">
-                    <button type="submit" class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200 ripple scale-hover">Simpan</button>
-                    <button type="button" onclick="closeEditModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover">Batal</button>
+                    <button 
+                        type="submit" 
+                        class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200 ripple scale-hover"
+                    >
+                        Simpan
+                    </button>
+                    <button 
+                        type="button" 
+                        onclick="closeEditModal()" 
+                        class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover"
+                    >
+                        Batal
+                    </button>
                 </div>
             </form>
         </div>
     </div>
-    <!-- Modal untuk konfirmasi hapus -->
+    <!-- Modal untuk konfirmasi hapus link -->
     <div id="delete-modal" class="modal">
         <div class="modal-content fade-in">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Konfirmasi Hapus</h2>
             <p class="text-gray-600 mb-4">Yakin ingin menghapus link ini?</p>
             <form id="delete-form" action="" method="post">
                 <div class="flex space-x-2">
-                    <button type="submit" class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200 ripple scale-hover">Ya, Hapus</button>
-                    <button type="button" onclick="closeDeleteModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover">Batal</button>
+                    <button 
+                        type="submit" 
+                        class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200 ripple scale-hover"
+                    >
+                        Ya, Hapus
+                    </button>
+                    <button 
+                        type="button" 
+                        onclick="closeDeleteModal()" 
+                        class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover"
+                    >
+                        Batal
+                    </button>
                 </div>
             </form>
         </div>
     </div>
-    <!-- Modal untuk konfirmasi hapus terpilih -->
+    <!-- Modal untuk konfirmasi hapus link terpilih -->
     <div id="bulk-delete-modal" class="modal">
         <div class="modal-content fade-in">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Konfirmasi Hapus Terpilih</h2>
             <p class="text-gray-600 mb-4">Yakin ingin menghapus link yang dipilih?</p>
             <div class="flex space-x-2">
-                <button type="submit" form="bulk-delete-form" class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200 ripple scale-hover">Ya, Hapus</button>
-                <button type="button" onclick="closeBulkDeleteModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover">Batal</button>
-            </div>
+                <button 
+                    type="submit" 
+                    form="bulk-delete-form" 
+                    class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200 ripple scale-hover"
+                >
+                    Ya, Hapus
+                </button>
+                <button 
+                    type="button" 
+                    onclick="closeBulkDeleteModal()" 
+                    class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover"
+                    >
+                        Batal
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Modal untuk konfirmasi hapus folder -->
+    <div id="delete-folder-modal" class="modal">
+        <div class="modal-content fade-in">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Konfirmasi Hapus Folder</h2>
+            <p class="text-gray-600 mb-4">Yakin ingin menghapus folder <span id="folder-name"></span>? Link di dalamnya akan dipindahkan ke Semua Folder.</p>
+            <form id="delete-folder-form" action="" method="post">
+                <div class="flex space-x-2">
+                    <button 
+                        type="submit" 
+                        class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200 ripple scale-hover"
+                    >
+                        Ya, Hapus
+                    </button>
+                    <button 
+                        type="button" 
+                        onclick="closeDeleteFolderModal()" 
+                        class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover"
+                    >
+                        Batal
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Modal untuk konfirmasi hapus folder terpilih -->
+    <div id="bulk-delete-folders-modal" class="modal">
+        <div class="modal-content fade-in">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Konfirmasi Hapus Folder Terpilih</h2>
+            <p class="text-gray-600 mb-4">Yakin ingin menghapus folder yang dipilih? Link di dalamnya akan dipindahkan ke Semua Folder.</p>
+            <div class="flex space-x-2">
+                <button 
+                    type="submit" 
+                    form="bulk-delete-folders-form" 
+                    class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition duration-200 ripple scale-hover"
+                >
+                    Ya, Hapus
+                </button>
+                <button 
+                    type="button" 
+                    onclick="closeBulkDeleteFoldersModal()" 
+                    class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover"
+                    >
+                        Batal
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Modal untuk tambah folder -->
+    <div id="add-folder-modal" class="modal">
+        <div class="modal-content fade-in">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Tambah Folder Baru</h2>
+            <form id="add-folder-form" action="/add_folder" method="post">
+                <label for="folder_name" class="block text-sm font-medium text-gray-700">Nama Folder</label>
+                <input 
+                    type="text" 
+                    name="folder_name" 
+                    id="folder_name" 
+                    required 
+                    class="mt-1 block w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-200" 
+                    placeholder="Nama folder"
+                >
+                <div class="mt-4 flex space-x-2">
+                    <button 
+                        type="submit" 
+                        class="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 transition duration-200 ripple scale-hover"
+                    >
+                        Tambah
+                    </button>
+                    <button 
+                        type="button" 
+                        onclick="closeAddFolderModal()" 
+                        class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover"
+                    >
+                        Batal
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
     <!-- Modal untuk konfirmasi logout -->
@@ -223,11 +545,236 @@
             <h2 class="text-xl font-bold text-gray-800 mb-4">Konfirmasi Logout</h2>
             <p class="text-gray-600 mb-4">Yakin ingin logout?</p>
             <div class="flex space-x-2">
-                <a href="/logout" class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200 ripple scale-hover">Ya, Logout</a>
-                <button type="button" onclick="closeLogoutModal()" class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover">Batal</button>
+                <a 
+                    href="/logout" 
+                    class="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition duration-200 ripple scale-hover"
+                >
+                    Ya, Logout
+                </a>
+                <button 
+                    type="button" 
+                    onclick="closeLogoutModal()" 
+                    class="bg-gray-300 text-gray-800 p-2 rounded-lg hover:bg-gray-400 transition duration-200 ripple scale-hover"
+                >
+                    Batal
+                </button>
             </div>
         </div>
     </div>
-    <script src="/static/js/scripts.js"></script>
+    <script>
+        // Drag and Drop Functions
+        function allowDrop(ev)  {
+            ev.preventDefault();
+        }
+
+        function drag(ev) {
+            const shortCode = ev.currentTarget.dataset.shortCode;
+            ev.dataTransfer.setData('short_codes', JSON.stringify([shortCode]));
+        }
+
+        function drop(ev, folderId) {
+            ev.preventDefault();
+            const shortCodes = JSON.parse(ev.dataTransfer.getData('short_codes'));
+            if (shortCodes.length === 0) return;
+
+            $.ajax({
+                url: '{{ url_for("move_to_folder") }}',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ short_codes: shortCodes, folder_id: folderId }),
+                success: function(response) {
+                    if (response.success) {
+                        window.location.reload();
+                    } else {
+                        alert('Gagal memindahkan link: ' + response.error);
+                    }
+                },
+                error: function(xhr) {
+                    alert('Terjadi kesalahan saat memindahkan link: ' + (xhr.responseJSON?.error || 'Unknown error'));
+                }
+            });
+        }
+
+        function dropHamburger(ev) {
+            ev.preventDefault();
+            openSidebar();
+            drop(ev, 'null');
+        }
+
+        // Sidebar Toggle
+        function openSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.add('open');
+            overlay.style.display = 'block';
+        }
+
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.remove('open');
+            overlay.style.display = 'none';
+        }
+
+        document.getElementById('hamburger')?.addEventListener('click', openSidebar);
+
+        // Select All Checkbox for Links
+        function toggleSelectAll() {
+            const checkboxes = document.querySelectorAll('input[name="selected_links"]');
+            const selectAll = document.getElementById('select-all');
+            checkboxes.forEach(checkbox => checkbox.checked = selectAll.checked);
+            updateDeleteButton();
+        }
+
+        // Update Delete Button State for Links
+        function updateDeleteButton() {
+            const checkboxes = document.querySelectorAll('input[name="selected_links"]:checked');
+            const deleteButton = document.getElementById('bulk-delete-button');
+            deleteButton.disabled = checkboxes.length === 0;
+        }
+
+        // Update Delete Folders Button State
+        function updateDeleteFoldersButton() {
+            const checkboxes = document.querySelectorAll('input[name="selected_folders"]:checked');
+            const deleteButton = document.getElementById('bulk-delete-folders-button');
+            deleteButton.disabled = checkboxes.length === 0;
+        }
+
+        // Modal Functions
+        function openEditModal(shortCode) {
+            document.getElementById('edit-form').action = '/update/' + shortCode;
+            document.getElementById('new_code').value = '';
+            document.getElementById('code-error').classList.add('error');
+            document.getElementById('edit-modal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').style.display = 'none';
+        }
+
+        function openDeleteModal(shortCode) {
+            document.getElementById('delete-form').action = '/delete/' + shortCode;
+            document.getElementById('delete-modal').style.display = 'flex';
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').style.display = 'none';
+        }
+
+        function openBulkDeleteModal() {
+            const checkboxes = document.querySelectorAll('input[name="selected_links"]:checked');
+            if (checkboxes.length === 0) {
+                alert('Pilih setidaknya satu link untuk dihapus!');
+                return;
+            }
+            document.getElementById('bulk-delete-modal').style.display = 'flex';
+        }
+
+        function closeBulkDeleteModal() {
+            document.getElementById('bulk-delete-modal').style.display = 'none';
+        }
+
+        function openDeleteFolderModal(folderId, folderName) {
+            document.getElementById('delete-folder-form').action = '/delete_folder/' + folderId;
+            document.getElementById('folder-name').textContent = folderName;
+            document.getElementById('delete-folder-modal').style.display = 'flex';
+        }
+
+        function closeDeleteFolderModal() {
+            document.getElementById('delete-folder-modal').style.display = 'none';
+        }
+
+        function openBulkDeleteFoldersModal() {
+            const checkboxes = document.querySelectorAll('input[name="selected_folders"]:checked');
+            if (checkboxes.length === 0) {
+                alert('Pilih setidaknya satu folder untuk dihapus!');
+                return;
+            }
+            document.getElementById('bulk-delete-folders-modal').style.display = 'flex';
+        }
+
+        function closeBulkDeleteFoldersModal() {
+            document.getElementById('bulk-delete-folders-modal').style.display = 'none';
+        }
+
+        function openAddFolderModal() {
+            document.getElementById('folder_name').value = '';
+            document.getElementById('add-folder-modal').style.display = 'flex';
+        }
+
+        function closeAddFolderModal() {
+            document.getElementById('add-folder-modal').style.display = 'none';
+        }
+
+        function openLogoutModal() {
+            document.getElementById('logout-modal').style.display = 'flex';
+        }
+
+        function closeLogoutModal() {
+            document.getElementById('logout-modal').style.display = 'none';
+        }
+
+        // Search and Filter
+        function filterLinks() {
+            const searchTerm = document.getElementById('search-bar').value.toLowerCase();
+            const contentType = document.getElementById('content_type_filter').value;
+            const folderId = document.getElementById('folder_filter').value;
+            const rows = document.querySelectorAll('#links-table-body tr');
+            let hasVisibleRows = false;
+
+            rows.forEach(row => {
+                const shortCode = row.dataset.shortCode.toLowerCase();
+                const content = row.dataset.content.toLowerCase();
+                const rowContentType = row.dataset.contentType;
+                const rowFolderId = row.dataset.folderId || '';
+                const matchesSearch = shortCode.includes(searchTerm) || content.includes(searchTerm);
+                const matchesContentType = !contentType || rowContentType === contentType;
+                const matchesFolder = !folderId || rowFolderId === folderId;
+
+                if (matchesSearch && matchesContentType && matchesFolder) {
+                    row.style.display = '';
+                    hasVisibleRows = true;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            document.getElementById('no-links-message').style.display = hasVisibleRows ? 'none' : 'block';
+        }
+
+        function selectFolder(folderId) {
+            document.getElementById('folder_filter').value = folderId;
+            filterLinks();
+            document.querySelectorAll('.folder-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.dataset.folderId === folderId) {
+                    item.classList.add('active');
+                }
+            });
+            if (window.innerWidth <= 640) {
+                closeSidebar();
+            }
+        }
+
+        document.getElementById('search-bar').addEventListener('input', filterLinks);
+        document.getElementById('content_type_filter').addEventListener('change', filterLinks);
+        document.getElementById('folder_filter').addEventListener('change', function(e) {
+            selectFolder(e.target.value);
+        });
+
+        // Show Success/Error Messages
+        if (document.querySelector('.success')) {
+            document.querySelector('.success').style.display = 'block';
+            setTimeout(() => document.querySelector('.success').style.display = 'none', 3000);
+        }
+        if (document.querySelector('.error')) {
+            document.querySelector('.error').style.display = 'block';
+            setTimeout(() => document.querySelector('.error').style.display = 'none', 3000);
+        }
+    </script>
+    <script>
+        document.getElementById('year').textContent = new Date().getFullYear();
+    </script>
+    {% include 'footer.html' %}
 </body>
 </html>

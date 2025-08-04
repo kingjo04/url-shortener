@@ -73,6 +73,7 @@
         <p class="text-center text-gray-600 mt-4">Belum punya akun? <a href="/register" class="text-indigo-500 hover:underline">Register</a></p>
         {% endif %}
     </div>
+    
     <!-- Modal untuk konfirmasi logout -->
     <div id="logout-modal" class="modal">
         <div class="modal-content fade-in">
@@ -93,4 +94,8 @@
         }
     </script>
 </body>
+<script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+
 </html>

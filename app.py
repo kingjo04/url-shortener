@@ -1,4 +1,5 @@
-from flask import Flask, request, redirect, render_template, session, url_for, send_file, Response
+
+from flask import Flask, request, redirect, render_template, session, url_for, send_file, Response, jsonify
 from urllib.parse import urlparse
 import string
 import random
@@ -53,15 +54,24 @@ def email_exists(email, exclude_user_id=None):
         logging.error(f"Error saat cek email: {str(e)}")
         return False
 
-def store_link(short_code, content_type, content, user_id):
+def folder_name_exists(name, user_id):
+    try:
+        response = supabase.table('folders').select('name').eq('name', name).eq('user_id', user_id).execute()
+        return len(response.data) > 0
+    except Exception as e:
+        logging.error(f"Error saat cek nama folder: {str(e)}")
+        return False
+
+def store_link(short_code, content_type, content, user_id, folder_id=None):
     try:
         supabase.table('links').insert({
             'short_code': short_code,
             'content_type': content_type,
             'content': content,
-            'user_id': user_id
+            'user_id': user_id,
+            'folder_id': folder_id
         }).execute()
-        logging.debug(f"Stored link: short_code={short_code}, content_type={content_type}, content={content}, user_id={user_id}")
+        logging.debug(f"Stored link: short_code={short_code}, folder_id={folder_id}")
     except Exception as e:
         logging.error(f"Error saat menyimpan link: {str(e)}")
         raise
@@ -98,7 +108,10 @@ def update_short_code(old_code, new_code, user_id):
 @app.route('/')
 def index():
     user = session.get('user')
-    return render_template('index.html', user=user)
+    folders = []
+    if user:
+        folders = supabase.table('folders').select('*').eq('user_id', user['id']).execute().data
+    return render_template('index.html', user=user, folders=folders)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -141,14 +154,101 @@ def logout():
 def dashboard():
     if 'user' not in session:
         return redirect(url_for('login'))
+
     user_id = session['user']['id']
     page = int(request.args.get('page', 1))
+    folder_id = request.args.get('folder_id')
+    content_type = request.args.get('content_type')
     per_page = 10
+
     query = supabase.table('links').select('*').eq('user_id', user_id)
+    if folder_id and folder_id.isdigit():
+        query = query.eq('folder_id', int(folder_id))
+    if content_type:
+        query = query.eq('content_type', content_type)
+
     total_links = len(query.execute().data)
     total_pages = (total_links + per_page - 1) // per_page
+
     links = query.order('created_at', desc=True).range((page - 1) * per_page, page * per_page - 1).execute().data
-    return render_template('dashboard.html', user=session['user'], links=links, page=page, total_pages=total_pages)
+    folders = supabase.table('folders').select('*').eq('user_id', user_id).execute().data
+
+    return render_template(
+        'dashboard.html',
+        user=session['user'],
+        links=links,
+        page=page,
+        total_pages=total_pages,
+        folders=folders,
+        selected_folder=int(folder_id) if folder_id and folder_id.isdigit() else None
+    )
+
+@app.route('/add_folder', methods=['POST'])
+def add_folder():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    folder_name = request.form.get('folder_name', '').strip()
+    user_id = session['user']['id']
+
+    if not folder_name:
+        return redirect(url_for('dashboard', error='Nama folder tidak boleh kosong!'))
+    if folder_name_exists(folder_name, user_id):
+        return redirect(url_for('dashboard', error='Nama folder sudah digunakan!'))
+
+    try:
+        supabase.table('folders').insert({
+            'name': folder_name,
+            'user_id': user_id
+        }).execute()
+        return redirect(url_for('dashboard', success='Folder berhasil ditambahkan!'))
+    except Exception as e:
+        logging.error(f"Gagal menambahkan folder: {str(e)}")
+        return redirect(url_for('dashboard', error=f'Gagal menambahkan folder: {str(e)}'))
+
+@app.route('/delete_folder/<folder_id>', methods=['POST'])
+def delete_folder(folder_id):
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    user_id = session['user']['id']
+    try:
+        # Verify folder belongs to user
+        response = supabase.table('folders').select('id').eq('id', folder_id).eq('user_id', user_id).execute()
+        if not response.data:
+            return redirect(url_for('dashboard', error='Folder tidak ditemukan atau tidak diizinkan!'))
+        
+        # Delete folder (links will have folder_id set to NULL due to on delete set null)
+        supabase.table('folders').delete().eq('id', folder_id).eq('user_id', user_id).execute()
+        logging.debug(f"Deleted folder: folder_id={folder_id}, user_id={user_id}")
+        return redirect(url_for('dashboard', success='Folder berhasil dihapus!'))
+    except Exception as e:
+        logging.error(f"Error saat hapus folder: {str(e)}")
+        return redirect(url_for('dashboard', error=f'Gagal menghapus folder: {str(e)}'))
+
+@app.route('/delete_selected_folders', methods=['POST'])
+def delete_selected_folders():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    user_id = session['user']['id']
+    selected_folders = request.form.getlist('selected_folders')
+    if not selected_folders:
+        return redirect(url_for('dashboard', error='Tidak ada folder yang dipilih!'))
+    try:
+        # Verify all folders belong to user
+        response = supabase.table('folders').select('id').eq('user_id', user_id).in_('id', selected_folders).execute()
+        valid_folder_ids = {str(row['id']) for row in response.data}
+        invalid_folder_ids = [fid for fid in selected_folders if fid not in valid_folder_ids]
+        if invalid_folder_ids:
+            return redirect(url_for('dashboard', error=f'Folder tidak ditemukan atau tidak diizinkan: {", ".join(invalid_folder_ids)}'))
+        
+        # Delete selected folders
+        supabase.table('folders').delete().eq('user_id', user_id).in_('id', selected_folders).execute()
+        logging.debug(f"Deleted folders: folder_ids={selected_folders}, user_id={user_id}")
+        return redirect(url_for('dashboard', success='Folder terpilih berhasil dihapus!'))
+    except Exception as e:
+        logging.error(f"Bulk delete folders error: {str(e)}")
+        return redirect(url_for('dashboard', error='Terjadi kesalahan saat menghapus folder!'))
 
 @app.route('/profile', methods=['GET', 'POST'])
 def profile():
@@ -180,9 +280,11 @@ def profile():
 def shorten():
     if 'user' not in session:
         return redirect(url_for('login'))
-    
+
     content_type = request.form['content_type']
     custom_code = request.form.get('custom_code', '').strip()
+    folder_id = request.form.get('folder_id')
+    folder_id = int(folder_id) if folder_id and folder_id.isdigit() else None
     user_id = session['user']['id']
     
     if custom_code:
@@ -249,7 +351,7 @@ def shorten():
         return render_template('index.html', user=session['user'], error='Konten tidak valid! Pastikan URL, teks, atau file diisi.')
 
     try:
-        store_link(short_code, content_type, content, user_id)
+        store_link(short_code, content_type, content, user_id, folder_id)
     except Exception as e:
         return render_template('index.html', user=session['user'], error=f'Gagal menyimpan link: {str(e)}')
 
@@ -343,6 +445,38 @@ def update(short_code):
     if success:
         return redirect(url_for('dashboard', success='Link berhasil diperbarui!'))
     return redirect(url_for('dashboard', error=message))
+
+@app.route('/move_to_folder', methods=['POST'])
+def move_to_folder():
+    if 'user' not in session:
+        return jsonify({'success': False, 'error': 'Tidak diizinkan'}), 401
+    
+    data = request.get_json()
+    short_codes = data.get('short_codes', [])
+    folder_id = data.get('folder_id')
+    user_id = session['user']['id']
+
+    if not short_codes:
+        return jsonify({'success': False, 'error': 'Tidak ada link yang dipilih'}), 400
+
+    try:
+        # Verifikasi bahwa semua link milik pengguna
+        response = supabase.table('links').select('short_code').eq('user_id', user_id).in_('short_code', short_codes).execute()
+        valid_short_codes = {row['short_code'] for row in response.data}
+        invalid_short_codes = [sc for sc in short_codes if sc not in valid_short_codes]
+
+        if invalid_short_codes:
+            return jsonify({'success': False, 'error': f'Link tidak ditemukan atau tidak diizinkan: {", ".join(invalid_short_codes)}'}), 404
+
+        # Perbarui folder_id untuk semua link yang valid
+        update_data = {'folder_id': None if folder_id == 'null' else folder_id}
+        supabase.table('links').update(update_data).eq('user_id', user_id).in_('short_code', short_codes).execute()
+        
+        logging.debug(f"Memindahkan link: short_codes={short_codes}, folder_id={folder_id}, user_id={user_id}")
+        return jsonify({'success': True})
+    except Exception as e:
+        logging.error(f"Error memindahkan link ke folder: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/delete_selected', methods=['POST'])
 def delete_selected():
