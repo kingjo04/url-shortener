@@ -12,7 +12,7 @@ import io
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
-app.secret_key = os.urandom(24)
+app.secret_key = os.getenv('SECRET_KEY') or os.getenv('FLASK_SECRET_KEY') or 'dev-secret-change-me'
 
 logging.basicConfig(level=logging.DEBUG)
 load_dotenv()
